@@ -1,3 +1,4 @@
+import argparse
 import glob
 import os
 
@@ -14,7 +15,45 @@ RUNS = 1
 
 
 def main():
-    run_experiments()
+    outlier_types, mv_anomalies = parse_arguments()
+    run_experiments(outlier_types, mv_anomalies)
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Perform tests on AD Algorithms. '
+                                                 'If no flags are passed, all tests will be performed')
+    parser.add_argument('-o', '--outlier-types',
+                        help='List of outlier height anomaly tests to perform. '
+                             'Choose from "extreme_1", "shift_1", "variance_1", "trend_1". '
+                             'If no list is passed, all outlier types will be tested.',
+                        nargs='*',
+                        default=None)
+    parser.add_argument('-m', '--mv-anomalies',
+                        help='List of multivariate anomaly tests to perform. '
+                             'Choose from "doubled", "inversed", "shrinked", "delayed", "xor", "delayed_missing". '
+                             'If no list is passed, all multivariate anomaly types will be tested.',
+                        nargs='*',
+                        default=None)
+    args = parser.parse_args()
+
+    if args.outlier_types is None and args.mv_anomalies is None:
+        return None, None
+
+    outlier_types = []
+    if args.outlier_types is not None:
+        if not args.outlier_types:
+            outlier_types = None
+        else:
+            outlier_types = args.outlier_types
+
+    mv_anomalies = []
+    if args.mv_anomalies is not None:
+        if not args.mv_anomalies:
+            mv_anomalies = None
+        else:
+            mv_anomalies = args.mv_anomalies
+
+    return outlier_types, mv_anomalies
 
 
 def detectors(seed):
@@ -34,14 +73,20 @@ def detectors(seed):
     return sorted(dets, key=lambda x: x.framework)
 
 
-def run_experiments():
+def run_experiments(outlier_types=None, mv_anomalies=None):
     # Set the seed manually for reproducibility.
     seeds = np.random.randint(np.iinfo(np.uint32).max, size=RUNS, dtype=np.uint32)
     output_dir = 'reports/experiments'
     evaluators = []
     outlier_height_steps = 1 if os.environ.get('CIRCLECI', False) else 10
 
-    for outlier_type in ['extreme_1', 'shift_1', 'variance_1', 'trend_1']:
+    if outlier_types is None:
+        outlier_types = ['extreme_1', 'shift_1', 'variance_1', 'trend_1']
+
+    if mv_anomalies is None:
+        mv_anomalies = ['doubled', 'inversed', 'shrinked', 'delayed', 'xor', 'delayed_missing']
+
+    for outlier_type in outlier_types:
         announce_experiment('Outlier Height')
         ev_extr = run_extremes_experiment(
             detectors, seeds, RUNS, outlier_type, steps=outlier_height_steps,
@@ -58,7 +103,7 @@ def run_experiments():
         output_dir=os.path.join(output_dir, 'multivariate'))
     evaluators.append(ev_mv)
 
-    for mv_anomaly in ['doubled', 'inversed', 'shrinked', 'delayed', 'xor', 'delayed_missing']:
+    for mv_anomaly in mv_anomalies:
         announce_experiment(f'Multivariate Polluted {mv_anomaly} Datasets')
         ev_mv = run_multivariate_polluted_experiment(
             detectors, seeds, RUNS, mv_anomaly,
