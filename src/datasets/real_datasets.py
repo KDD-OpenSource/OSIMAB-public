@@ -1,5 +1,6 @@
 import os
 import pickle
+from abc import ABC
 
 import numpy as np
 import pandas as pd
@@ -7,7 +8,7 @@ import pandas as pd
 from .dataset import Dataset
 
 
-class RealDataset(Dataset):
+class RealDataset(Dataset, ABC):
     def __init__(self, raw_path, **kwargs):
         super().__init__(**kwargs)
         self.raw_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../data/raw/", raw_path)
