@@ -22,6 +22,7 @@ class AutoEncoder(Algorithm, PyTorchUtils):
         self.batch_size = batch_size
         self.lr = lr
 
+        self.input_size = None
         self.hidden_size = hidden_size
         self.sequence_length = sequence_length
         self.train_gaussian_percentage = train_gaussian_percentage
@@ -36,16 +37,17 @@ class AutoEncoder(Algorithm, PyTorchUtils):
         data = X.values
         sequences = [data[i:i + self.sequence_length] for i in range(data.shape[0] - self.sequence_length + 1)]
         indices = np.random.permutation(len(sequences))
-        split_point = int(self.train_gaussian_percentage * len(sequences))
-        train_max = len(sequences) - split_point
+        split_point = len(sequences) - int(self.train_gaussian_percentage * len(sequences))
         if self.train_max is not None:
-            train_max = min(self.train_max, train_max)
+            split_point = min(self.train_max, split_point)
         train_loader = DataLoader(dataset=sequences, batch_size=self.batch_size, drop_last=True,
-                                  sampler=SubsetRandomSampler(indices[:train_max]), pin_memory=True)
+                                  sampler=SubsetRandomSampler(indices[:split_point]), pin_memory=True)
         train_gaussian_loader = DataLoader(dataset=sequences, batch_size=self.batch_size, drop_last=True,
-                                           sampler=SubsetRandomSampler(indices[-split_point:]), pin_memory=True)
+                                           sampler=SubsetRandomSampler(indices[split_point:]), pin_memory=True)
 
-        self.aed = AutoEncoderModule(X.shape[1], self.sequence_length, self.hidden_size, seed=self.seed, gpu=self.gpu)
+        self.input_size = X.shape[1]
+        self.aed = AutoEncoderModule(self.input_size, self.sequence_length, self.hidden_size, seed=self.seed,
+                                     gpu=self.gpu)
         self.to_device(self.aed)  # .double()
         optimizer = torch.optim.Adam(self.aed.parameters(), lr=self.lr)
 
@@ -112,6 +114,27 @@ class AutoEncoder(Algorithm, PyTorchUtils):
 
         return scores
 
+    def save(self, f):
+        torch.save({
+            'model_state_dict': self.aed.state_dict(),
+            'mean': self.mean,
+            'cov': self.cov,
+            'input_size': self.input_size,
+            'sequence_length': self.sequence_length,
+            'hidden_size': self.hidden_size,
+            'seed': self.seed,
+            'gpu': self.gpu
+        }, f)
+
+    def load(self, f):
+        checkpoint = torch.load(f)
+        model_state_dict = checkpoint['model_state_dict']
+        del checkpoint['model_state_dict']
+        for key in checkpoint:
+            setattr(self, key, checkpoint[key])
+        self.aed = AutoEncoderModule(self.input_size, self.sequence_length, self.hidden_size, seed=self.seed,
+                                     gpu=self.gpu)
+        self.aed.load_state_dict(model_state_dict)
 
 class AutoEncoderModule(nn.Module, PyTorchUtils):
     def __init__(self, n_features: int, sequence_length: int, hidden_size: int, seed: int, gpu: int):
