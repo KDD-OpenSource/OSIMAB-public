@@ -6,6 +6,7 @@ from .aae_diff import AdversarialAutoEncoderDiff
 from .aae import AdversarialAutoEncoder
 from .lstm_ad import LSTMAD
 from .lstm_enc_dec_axl import LSTMED
+from .lstm_enc_dec_par import LSTMEDP
 from .rnn_ebm import RecurrentEBM
 
 __all__ = [
@@ -17,5 +18,6 @@ __all__ = [
     'Donut',
     'LSTMAD',
     'LSTMED',
+    'LSTMEDP',
     'RecurrentEBM'
 ]
