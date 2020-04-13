@@ -12,8 +12,8 @@ from tqdm import trange
 from .algorithm_utils import Algorithm, PyTorchUtils
 
 
-class LSTMED(Algorithm, PyTorchUtils):
-    def __init__(self, name: str='LSTM-ED', num_epochs: int=10, batch_size: int=20, lr: float=1e-3,
+class GRUED(Algorithm, PyTorchUtils):
+    def __init__(self, name: str='GRU-ED', num_epochs: int=10, batch_size: int=20, lr: float=1e-3,
                  hidden_size: int=5, sequence_length: int=30, stride: int=1, train_gaussian_percentage: float=0.25,
                  n_layers: tuple=(1, 1), use_bias: tuple=(True, True), dropout: tuple=(0, 0),
                  seed: int=None, gpu: int = None, details=True):
@@ -32,7 +32,7 @@ class LSTMED(Algorithm, PyTorchUtils):
         self.use_bias = use_bias
         self.dropout = dropout
 
-        self.lstmed = None
+        self.grued = None
         self.mean, self.cov = None, None
 
     def fit(self, X: pd.DataFrame):
@@ -47,26 +47,26 @@ class LSTMED(Algorithm, PyTorchUtils):
         train_gaussian_loader = DataLoader(dataset=sequences, batch_size=self.batch_size, drop_last=True,
                                            sampler=SubsetRandomSampler(indices[-split_point:]), pin_memory=True)
 
-        self.lstmed = LSTMEDModule(X.shape[1], self.hidden_size,
-                                   self.n_layers, self.use_bias, self.dropout,
-                                   seed=self.seed, gpu=self.gpu)
-        self.to_device(self.lstmed)
-        optimizer = torch.optim.Adam(self.lstmed.parameters(), lr=self.lr)
+        self.grued = GRUEDModule(X.shape[1], self.hidden_size,
+                                  self.n_layers, self.use_bias, self.dropout,
+                                  seed=self.seed, gpu=self.gpu)
+        self.to_device(self.grued)
+        optimizer = torch.optim.Adam(self.grued.parameters(), lr=self.lr)
 
-        self.lstmed.train()
+        self.grued.train()
         for epoch in trange(self.num_epochs):
             logging.debug(f'Epoch {epoch+1}/{self.num_epochs}.')
             for ts_batch in train_loader:
-                output = self.lstmed(self.to_var(ts_batch))
+                output = self.grued(self.to_var(ts_batch))
                 loss = nn.MSELoss(size_average=False)(output, self.to_var(ts_batch.float()))
-                self.lstmed.zero_grad()
+                self.grued.zero_grad()
                 loss.backward()
                 optimizer.step()
 
-        self.lstmed.eval()
+        self.grued.eval()
         error_vectors = []
         for ts_batch in train_gaussian_loader:
-            output = self.lstmed(self.to_var(ts_batch))
+            output = self.grued(self.to_var(ts_batch))
             error = nn.L1Loss(reduce=False)(output, self.to_var(ts_batch.float()))
             error_vectors += list(error.view(-1, X.shape[1]).data.cpu().numpy())
 
@@ -81,13 +81,13 @@ class LSTMED(Algorithm, PyTorchUtils):
                      for i in range(0, data.shape[0] - self.sequence_length + 1, self.stride)]
         data_loader = DataLoader(dataset=sequences, batch_size=self.batch_size, shuffle=False, drop_last=False)
 
-        self.lstmed.eval()
+        self.grued.eval()
         mvnormal = multivariate_normal(self.mean, self.cov, allow_singular=True)
         scores = []
         outputs = []
         errors = []
         for idx, ts in enumerate(data_loader):
-            output = self.lstmed(self.to_var(ts))
+            output = self.grued(self.to_var(ts))
             error = nn.L1Loss(reduce=False)(output, self.to_var(ts.float()))
             score = -mvnormal.logpdf(error.view(-1, X.shape[1]).data.cpu().numpy())
             scores.append(score.reshape(ts.size(0), self.sequence_length))
@@ -121,7 +121,7 @@ class LSTMED(Algorithm, PyTorchUtils):
         return scores
 
 
-class LSTMEDModule(nn.Module, PyTorchUtils):
+class GRUEDModule(nn.Module, PyTorchUtils):
     def __init__(self, n_features: int, hidden_size: int,
                  n_layers: tuple, use_bias: tuple, dropout: tuple,
                  seed: int, gpu: int):
@@ -134,18 +134,19 @@ class LSTMEDModule(nn.Module, PyTorchUtils):
         self.use_bias = use_bias
         self.dropout = dropout
 
-        self.encoder = nn.LSTM(self.n_features, self.hidden_size, batch_first=True,
+        self.encoder = nn.GRU(self.n_features, self.hidden_size, batch_first=True,
                                num_layers=self.n_layers[0], bias=self.use_bias[0], dropout=self.dropout[0])
         self.to_device(self.encoder)
-        self.decoder = nn.LSTM(self.n_features, self.hidden_size, batch_first=True,
+        self.decoder = nn.GRU(self.n_features, self.hidden_size, batch_first=True,
                                num_layers=self.n_layers[1], bias=self.use_bias[1], dropout=self.dropout[1])
         self.to_device(self.decoder)
         self.hidden2output = nn.Linear(self.hidden_size, self.n_features)
         self.to_device(self.hidden2output)
 
     def _init_hidden(self, batch_size):
-        return (self.to_var(torch.Tensor(self.n_layers[0], batch_size, self.hidden_size).zero_()),
-                self.to_var(torch.Tensor(self.n_layers[0], batch_size, self.hidden_size).zero_()))
+        # return (self.to_var(torch.Tensor(self.n_layers[0], batch_size, self.hidden_size).zero_()),
+        #         self.to_var(torch.Tensor(self.n_layers[0], batch_size, self.hidden_size).zero_()))
+        return self.to_var(torch.Tensor(self.n_layers[0], batch_size, self.hidden_size).zero_())
 
     def forward(self, ts_batch, return_latent: bool=False):
         batch_size = ts_batch.shape[0]
@@ -154,7 +155,7 @@ class LSTMEDModule(nn.Module, PyTorchUtils):
         enc_hidden = self._init_hidden(batch_size)  # initialization with zero
         _, enc_hidden = self.encoder(ts_batch.float(), enc_hidden)  # .float() here or .double() for the model
 
-        # 2. Use hidden state as initialization for our Decoder-LSTM
+        # 2. Use hidden state as initialization for our Decoder-GRU
         dec_hidden = enc_hidden
 
         # 3. Also, use this hidden state to get the first output aka the last point of the reconstructed timeseries
