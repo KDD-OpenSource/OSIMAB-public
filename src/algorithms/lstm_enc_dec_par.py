@@ -1,6 +1,6 @@
 import numpy as np
 
-from .lstm_enc_dec_axl import LSTMED
+from .lstm_enc_dec_latent import LSTMEDLatent
 from .algorithm_utils import Algorithm, PyTorchUtils
 
 
@@ -26,12 +26,12 @@ class LSTMEDP(Algorithm, PyTorchUtils):
         self.lstmed_list = None
 
     def fit(self, X):
-        self.lstmed_list = [LSTMED(num_epochs=self.num_epochs, batch_size=self.batch_size, lr=self.lr,
-                                   hidden_size=self.hidden_size, sequence_length=self.sequence_length,
-                                   train_gaussian_percentage=self.train_gaussian_percentage, n_layers=self.n_layers,
-                                   use_bias=self.use_bias, dropout=self.dropout, seed=self.seed, gpu=self.gpu,
-                                   details=self.details)
-                       for _ in range(X.shape[1])]
+        self.lstmed_list = [LSTMEDLatent(num_epochs=self.num_epochs, batch_size=self.batch_size, lr=self.lr,
+                                         hidden_size=self.hidden_size, sequence_length=self.sequence_length,
+                                         train_gaussian_percentage=self.train_gaussian_percentage,
+                                         n_layers=self.n_layers, use_bias=self.use_bias, dropout=self.dropout,
+                                         seed=self.seed, gpu=self.gpu, details=self.details)
+                            for _ in range(X.shape[1])]
         for lstmed, channel in zip(self.lstmed_list, X.columns):
             lstmed.fit(X[[channel]])
 
