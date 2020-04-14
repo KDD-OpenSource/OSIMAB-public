@@ -40,12 +40,12 @@ class OSIMABDataset(RealDataset):
         train_label = pd.Series(np.zeros(train.shape[0]))
         test_label = pd.Series(np.zeros(test.shape[0]))
 
-        idxs = np.random.choice(1500, 3)
+        idxs = np.random.choice(1500, 5)
         dur = 700
         for idx in idxs:
             channel = np.random.choice(5,1)[0]
             tmp = test.iloc[dur*idx:dur*(idx+1),channel]
-            tmp = tmp.shift(periods=np.random.choice(29,1)[0]+1, fill_value=np.mean(tmp)[0])
+            tmp = tmp.shift(periods=np.random.choice(29,1)[0]+1, fill_value=np.mean(tmp))
             test.iloc[dur*idx:dur*(idx+1),channel] = tmp
             test_label.iloc[dur*idx:dur*(idx+1)] = 1
         test = pd.DataFrame(scaler.transform(test), columns=test.columns)

@@ -40,18 +40,6 @@ class AutoCorrelationEncoder(Algorithm, PyTorchUtils):
         self.ae_rhs = None
         self.mean, self.cov = None, None
 
-    def SensorSpecificLoss(self, yhat, y):
-        # mse = nn.MSELoss()
-        # batch_size = yhat.size()[0]
-        subclassLength=self.hidden_size
-        yhat = yhat.view((-1, subclassLength))
-        y = y.view((-1, subclassLength))
-        error = yhat - y
-        sqr_err = error ** 2
-        sum_sqr_err = sqr_err.sum(1)
-        root_sum_sqr_err = torch.sqrt(sum_sqr_err)
-        return torch.mean(root_sum_sqr_err)
-
     def fit(self, X):
         X.interpolate(inplace=True)
         X.bfill(inplace=True)
@@ -99,7 +87,7 @@ class AutoCorrelationEncoder(Algorithm, PyTorchUtils):
 
         self.ae_rhs = AutoEncoder(name='AutoEncoderRHS', num_epochs=self.num_epochs, batch_size=self.batch_size,
                                   lr=self.lr, hidden_size=self.hidden_size, sequence_length=1, seed=self.seed,
-                                  gpu=self.gpu, details=self.details)
+                                  gpu=self.gpu, details=self.details, sensor_specific=True)
         df_enc = self.generate_enc(data_loader=train_loader)
         self.ae_rhs.fit(df_enc)
 
