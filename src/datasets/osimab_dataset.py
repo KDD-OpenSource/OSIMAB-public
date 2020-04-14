@@ -20,10 +20,10 @@ class OSIMABDataset(RealDataset):
     def get_data_osimab(self):
         df = pd.read_csv(self.processed_path)
         n_train = int(df.shape[0] * 0.7)
-        train = df.iloc[:n_train, :5]
+        train = df.iloc[:n_train, 2:7]
         scaler = StandardScaler()
         train = pd.DataFrame(scaler.fit_transform(train), columns=train.columns)
-        test = df.iloc[n_train:, :5]
+        test = df.iloc[n_train:, 2:7]
         test = pd.DataFrame(scaler.transform(test), columns=test.columns)
         train_label = pd.Series(np.zeros(train.shape[0]))
         test_label = pd.Series(np.zeros(test.shape[0]))
@@ -40,12 +40,12 @@ class OSIMABDataset(RealDataset):
         train_label = pd.Series(np.zeros(train.shape[0]))
         test_label = pd.Series(np.zeros(test.shape[0]))
 
-        idxs = np.random.choice(1500, 1000)
+        idxs = np.random.choice(1500, 3)
         for idx in idxs:
             channel = np.random.choice(5,1)[0]
-            tmp = test.iloc[30*idx:30*(idx+1),channel]
+            tmp = test.iloc[100*idx:100*(idx+1),channel]
             tmp = tmp.shift(periods=np.random.choice(29,1)[0]+1, fill_value=0)
-            test.iloc[30*idx:30*(idx+1),channel] = tmp
-            test_label.iloc[30*idx:30*(idx+1)] = 1
+            test.iloc[100*idx:100*(idx+1),channel] = tmp
+            test_label.iloc[100*idx:100*(idx+1)] = 1
         test = pd.DataFrame(scaler.transform(test), columns=test.columns)
         return (train, train_label), (test, test_label)
