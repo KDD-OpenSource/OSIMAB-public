@@ -9,7 +9,7 @@ from src.algorithms import AutoCorrelationEncoder
 
 
 def detectors(seed):
-    standard_epochs = 1
+    standard_epochs = 20
     dets = [AutoCorrelationEncoder(num_epochs=standard_epochs, seed=seed), ]
 
     return sorted(dets, key=lambda x: x.framework)
