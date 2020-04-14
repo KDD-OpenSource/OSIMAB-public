@@ -45,7 +45,7 @@ class OSIMABDataset(RealDataset):
         for idx in idxs:
             channel = np.random.choice(5,1)[0]
             tmp = test.iloc[dur*idx:dur*(idx+1),channel]
-            tmp = tmp.shift(periods=np.random.choice(29,1)[0]+1, fill_value=np.mean(tmp)[channel])
+            tmp = tmp.shift(periods=np.random.choice(29,1)[0]+1, fill_value=np.mean(tmp)[0])
             test.iloc[dur*idx:dur*(idx+1),channel] = tmp
             test_label.iloc[dur*idx:dur*(idx+1)] = 1
         test = pd.DataFrame(scaler.transform(test), columns=test.columns)
