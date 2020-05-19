@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 from tqdm import trange
 
-from .algorithm_utils import Algorithm, PyTorchUtils
+from .algorithm_utils import Algorithm, PyTorchUtils, average_sequences
 
 
 class AutoEncoder(Algorithm, PyTorchUtils):
@@ -93,24 +93,23 @@ class AutoEncoder(Algorithm, PyTorchUtils):
                 errors.append(error.data.numpy())
 
         # stores seq_len-many scores per timestamp and averages them
-        scores = np.concatenate(scores)
-        lattice = np.full((self.sequence_length, X.shape[0]), np.nan)
-        for i, score in enumerate(scores):
-            lattice[i % self.sequence_length, i:i + self.sequence_length] = score
-        scores = np.nanmean(lattice, axis=0)
+        scores = average_sequences(
+                scores,
+                self.sequence_length,
+                output_shape=X.shape[0])
 
         if self.details:
-            outputs = np.concatenate(outputs)
-            lattice = np.full((self.sequence_length, X.shape[0], X.shape[1]), np.nan)
-            for i, output in enumerate(outputs):
-                lattice[i % self.sequence_length, i:i + self.sequence_length, :] = output
-            self.prediction_details.update({'reconstructions_mean': np.nanmean(lattice, axis=0).T})
+            outputs = average_sequences(
+                    sequences=outputs,
+                    sequence_length=self.sequence_length,
+                    output_shape=(X.shape[0], X.shape[1]))
+            self.prediction_details.update({'reconstructions_mean': outputs})
 
-            errors = np.concatenate(errors)
-            lattice = np.full((self.sequence_length, X.shape[0], X.shape[1]), np.nan)
-            for i, error in enumerate(errors):
-                lattice[i % self.sequence_length, i:i + self.sequence_length, :] = error
-            self.prediction_details.update({'errors_mean': np.nanmean(lattice, axis=0).T})
+            errors = average_sequences(
+                    sequences=errors,
+                    sequence_length=self.sequence_length,
+                    output_shape=(X.shape[0], X.shape[1]))
+            self.prediction_details.update({'errors_mean': errors})
 
         return scores
 

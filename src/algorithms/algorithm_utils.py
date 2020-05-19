@@ -72,3 +72,15 @@ class TensorflowUtils(metaclass=abc.ABCMeta):
         local_device_protos = device_lib.list_local_devices()
         gpus = [x.name for x in local_device_protos if x.device_type == 'GPU']
         return tf.device(gpus[self.gpu] if gpus and self.gpu is not None else '/cpu:0')
+
+
+def average_sequences(sequences, sequence_length, output_shape, stride=1):
+    if isinstance(output_shape, int):
+        output_shape = (output_shape,)
+    sequences = np.concatenate(sequences)
+    lattice = np.full((sequence_length, *output_shape), np.nan) 
+    for i, sequence in enumerate(sequences):
+        lattice[i % sequence_length, i:i + sequence_length] = sequence
+    sequences = np.nanmean(lattice, axis=0).T
+    return sequences
+
