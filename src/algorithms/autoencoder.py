@@ -9,7 +9,10 @@ from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 from tqdm import trange
 
-from .algorithm_utils import Algorithm, PyTorchUtils, average_sequences
+from .algorithm_utils import Algorithm, PyTorchUtils
+from .helpers import make_sequences
+from .helpers import split_sequences
+from .helpers import average_sequences
 
 
 class AutoEncoder(Algorithm, PyTorchUtils):
@@ -32,18 +35,12 @@ class AutoEncoder(Algorithm, PyTorchUtils):
         self.mean, self.cov = None, None
 
     def fit(self, X: pd.DataFrame):
-        X.interpolate(inplace=True)
-        X.bfill(inplace=True)
-        data = X.values
-        sequences = [data[i:i + self.sequence_length] for i in range(data.shape[0] - self.sequence_length + 1)]
-        indices = np.random.permutation(len(sequences))
-        split_point = len(sequences) - int(self.train_gaussian_percentage * len(sequences))
-        if self.train_max is not None:
-            split_point = min(self.train_max, split_point)
-        train_loader = DataLoader(dataset=sequences, batch_size=self.batch_size, drop_last=True,
-                                  sampler=SubsetRandomSampler(indices[:split_point]), pin_memory=True)
-        train_gaussian_loader = DataLoader(dataset=sequences, batch_size=self.batch_size, drop_last=True,
-                                           sampler=SubsetRandomSampler(indices[split_point:]), pin_memory=True)
+        sequences = make_sequences(data=X, sequence_length=self.sequence_length)
+        seq_train, seq_val = split_sequences(sequences, self.train_gaussian_percentage)
+        train_loader = DataLoader(dataset=seq_train, batch_size=self.batch_size,
+                drop_last=True, pin_memory=True)
+        train_gaussian_loader = DataLoader(dataset=seq_val,
+                batch_size=self.batch_size, drop_last=True, pin_memory=True)
 
         self.input_size = X.shape[1]
         self.aed = AutoEncoderModule(self.input_size, self.sequence_length, self.hidden_size, seed=self.seed,
@@ -72,11 +69,9 @@ class AutoEncoder(Algorithm, PyTorchUtils):
         self.cov = np.cov(error_vectors, rowvar=False)
 
     def predict(self, X: pd.DataFrame) -> np.array:
-        X.interpolate(inplace=True)
-        X.bfill(inplace=True)
-        data = X.values
-        sequences = [data[i:i + self.sequence_length] for i in range(data.shape[0] - self.sequence_length + 1)]
-        data_loader = DataLoader(dataset=sequences, batch_size=self.batch_size, shuffle=False, drop_last=False)
+        sequences = make_sequences(data=X, sequence_length=self.sequence_length)
+        data_loader = DataLoader(dataset=sequences, batch_size=self.batch_size,
+                shuffle=False, drop_last=False)
 
         self.aed.eval()
         mvnormal = multivariate_normal(self.mean, self.cov, allow_singular=True)
