@@ -10,6 +10,8 @@ from torch.utils.data.sampler import SubsetRandomSampler
 from tqdm import trange
 
 from .algorithm_utils import Algorithm, PyTorchUtils
+from .helpers import make_sequences
+from .helpers import split_sequences
 
 
 class LSTMED(Algorithm, PyTorchUtils):
@@ -36,16 +38,12 @@ class LSTMED(Algorithm, PyTorchUtils):
         self.mean, self.cov = None, None
 
     def fit(self, X: pd.DataFrame):
-        X.interpolate(inplace=True)
-        X.bfill(inplace=True)
-        data = X.values
-        sequences = [data[i:i + self.sequence_length] for i in range(data.shape[0] - self.sequence_length + 1)]
-        indices = np.random.permutation(len(sequences))
-        split_point = int(self.train_gaussian_percentage * len(sequences))
-        train_loader = DataLoader(dataset=sequences, batch_size=self.batch_size, drop_last=True,
-                                  sampler=SubsetRandomSampler(indices[:-split_point]), pin_memory=True)
-        train_gaussian_loader = DataLoader(dataset=sequences, batch_size=self.batch_size, drop_last=True,
-                                           sampler=SubsetRandomSampler(indices[-split_point:]), pin_memory=True)
+        sequences = make_sequences(data=X, sequence_length=self.sequence_length)
+        seq_train, seq_val = split_sequences(sequences, self.train_gaussian_percentage)
+        train_loader = DataLoader(dataset=seq_train, batch_size=self.batch_size,
+                drop_last=True, pin_memory=True)
+        train_gaussian_loader = DataLoader(dataset=seq_val,
+                batch_size=self.batch_size, drop_last=True, pin_memory=True)
 
         self.lstmed = LSTMEDModule(X.shape[1], self.hidden_size,
                                    self.n_layers, self.use_bias, self.dropout,
@@ -77,9 +75,9 @@ class LSTMED(Algorithm, PyTorchUtils):
         X.interpolate(inplace=True)
         X.bfill(inplace=True)
         data = X.values
-        sequences = [data[i:i + self.sequence_length]
-                     for i in range(0, data.shape[0] - self.sequence_length + 1, self.stride)]
-        data_loader = DataLoader(dataset=sequences, batch_size=self.batch_size, shuffle=False, drop_last=False)
+        sequences = make_sequences(data=X, sequence_length=self.sequence_length)
+        data_loader = DataLoader(dataset=sequences, batch_size=self.batch_size,
+                shuffle=False, drop_last=False)
 
         self.lstmed.eval()
         mvnormal = multivariate_normal(self.mean, self.cov, allow_singular=True)

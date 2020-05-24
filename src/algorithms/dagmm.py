@@ -14,6 +14,7 @@ from tqdm import trange
 from .algorithm_utils import Algorithm, PyTorchUtils
 from .autoencoder import AutoEncoderModule
 from .lstm_enc_dec_axl import LSTMEDModule
+from .helpers import make_sequences
 
 
 class DAGMM(Algorithm, PyTorchUtils):
@@ -68,10 +69,7 @@ class DAGMM(Algorithm, PyTorchUtils):
     def fit(self, X: pd.DataFrame):
         """Learn the mixture probability, mean and covariance for each component k.
         Store the computed energy based on the training data and the aforementioned parameters."""
-        X.interpolate(inplace=True)
-        X.bfill(inplace=True)
-        data = X.values
-        sequences = [data[i:i + self.sequence_length] for i in range(X.shape[0] - self.sequence_length + 1)]
+        sequences = make_sequences(data=X, sequence_length=self.sequence_length)
         data_loader = DataLoader(dataset=sequences, batch_size=self.batch_size, shuffle=True, drop_last=True)
         self.hidden_size = 5 + int(X.shape[1] / 20)
         autoencoder = self.autoencoder_type(X.shape[1], hidden_size=self.hidden_size, **self.autoencoder_args)
@@ -107,10 +105,7 @@ class DAGMM(Algorithm, PyTorchUtils):
         """Using the learned mixture probability, mean and covariance for each component k, compute the energy on the
         given data."""
         self.dagmm.eval()
-        X.interpolate(inplace=True)
-        X.bfill(inplace=True)
-        data = X.values
-        sequences = [data[i:i + self.sequence_length] for i in range(len(data) - self.sequence_length + 1)]
+        sequences = make_sequences(data=X, sequence_length=self.sequence_length)
         data_loader = DataLoader(dataset=sequences, batch_size=1, shuffle=False)
         test_energy = np.full((self.sequence_length, X.shape[0]), np.nan)
 
