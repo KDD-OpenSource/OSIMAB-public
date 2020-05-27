@@ -1,5 +1,5 @@
-from pandas import DataFrame
 import numpy as np
+import pandas as pd
 
 
 def average_sequences(sequences, sequence_length, output_shape, stride=1):
@@ -14,25 +14,25 @@ def average_sequences(sequences, sequence_length, output_shape, stride=1):
 
 
 def make_sequences(data, sequence_length, stride=0):
-    if not isinstance(data, (DataFrame, np.array)):
-        raise TypeError('data must be of type pd.DataFrame or np.array.'
+    if not isinstance(data, (pd.DataFrame, list)):
+        raise TypeError('data must be of type pd.DataFrame or list.'
             'The type of data was {}.'.format(type(data)))
 
-    if len(data.shape) not in [2, 3]:
-        raise ValueError('sequence: data has wrong numer of dimensions.'
-            'requres 2 or 3, has{}.'.format(len(data.shape)))
+    if isinstance(data, pd.DataFrame):
+        data = [data]
 
-    if isinstance(data, DataFrame):
-        data = data.interpolate()
-        data = data.bfill()
-        data = data.values
+    seq_list = []
+    for df in data:
+        df = df.interpolate()
+        df = df.bfill()
+        df = df.values
 
-    if len(data.shape) == 3:
-        return data
+        n_sequences = df.shape[0] - sequence_length + 1
+        sequences = [df[i:i + sequence_length] for i in range(n_sequences)]
+        sequences = np.array(sequences)
+        seq_list.append(sequences)
 
-    n_sequences = data.shape[0] - sequence_length + 1
-    sequences = [data[i:i + sequence_length] for i in range(n_sequences)]
-    sequences = np.array(sequences)
+    sequences = np.vstack(seq_list)
     return sequences
 
 
