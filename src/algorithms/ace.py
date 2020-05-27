@@ -1,5 +1,6 @@
 import logging
 import math
+import threading
 
 import numpy as np
 import pandas as pd
@@ -11,6 +12,9 @@ from torch.utils.data.sampler import SubsetRandomSampler
 from tqdm import trange
 
 from .algorithm_utils import Algorithm, PyTorchUtils
+from .helpers import make_sequences
+from .helpers import average_sequences
+from .helpers import split_sequences
 from .autoencoder import AutoEncoderModule, AutoEncoder
 
 
@@ -41,42 +45,70 @@ class AutoCorrelationEncoder(Algorithm, PyTorchUtils):
         self.mean, self.cov = None, None
 
     def fit(self, X):
-        X.interpolate(inplace=True)
-        X.bfill(inplace=True)
-        data = X.values
-        sequences = [data[i:i + self.sequence_length] for i in range(data.shape[0] - self.sequence_length + 1)]
+        sequences = make_sequences(data=X, sequence_length=self.sequence_length)
+        seq_train, seq_val = split_sequences(sequences, self.train_gaussian_percentage)
         indices = np.random.permutation(len(sequences))
         split_point = len(sequences) - int(self.train_gaussian_percentage * len(sequences))
         split_point = min(self.train_max, split_point)
-        train_loader = DataLoader(dataset=sequences, batch_size=self.batch_size, drop_last=True,
-                                  sampler=SubsetRandomSampler(indices[:split_point]), pin_memory=True)
         train_gaussian_loader = DataLoader(dataset=sequences, batch_size=self.batch_size, drop_last=True,
                                            sampler=SubsetRandomSampler(indices[split_point:]), pin_memory=True)
 
         self.ae_list = [AutoEncoderModule(1, self.sequence_length, self.hidden_size, seed=self.seed,
                                           gpu=self.gpu)
-                        for _ in X.columns]
-        for ae in self.ae_list:
-            self.to_device(ae)
-        optimizers = {ae: torch.optim.Adam(ae.parameters(), lr=self.lr)
-                      for ae in self.ae_list}
-        loss = nn.MSELoss(size_average=False)
+                        for _ in range(X.shape[1])]
 
-        for ae in self.ae_list:
+        def train_ae(ae, sequences, channel, lr):
+            self.to_device(ae)
+            optimizer = torch.optim.Adam(ae.parameters(), lr=lr)
+            loss = nn.MSELoss(size_average=False)
             ae.train()
-        for epoch in trange(self.num_epochs):
-            logging.debug(f'Epoch {epoch+1}/{self.num_epochs}.')
-            for ts_batch in train_loader:
-                for channel in range(ts_batch.size(-1)):
-                    ae = self.ae_list[channel]
-                    ts_batch_channel = ts_batch[:, :, channel]
-                    output_channel = ae(self.to_var(ts_batch_channel))
-                    loss_channel = loss(output_channel, self.to_var(ts_batch_channel.float()))
+            train_loader = DataLoader(dataset=sequences, batch_size=self.batch_size, drop_last=True,
+                                      pin_memory=True)
+            for epoch in trange(self.num_epochs):
+                logging.debug(f'Epoch {epoch+1}/{self.num_epochs}.')
+                for ts_batch in train_loader:
+                    output_channel = ae(self.to_var(ts_batch))
+                    loss_channel = loss(output_channel, self.to_var(ts_batch.float()))
                     ae.zero_grad()
                     loss_channel.backward()
-                    optimizers[ae].step()
+                    optimizer.step()
+
+        thread_dict = {}
+        for channel, ae in enumerate(self.ae_list):
+            seq_channel = seq_train[:, :, channel]
+            thread = threading.Thread(target=train_ae, args=(ae, seq_channel,
+                channel, self.lr))
+            thread.start()
+            thread_dict[ae] = thread
+
+        for ae in self.ae_list:
+            thread_dict[ae].join()
+
         for ae in self.ae_list:
             ae.eval()
+
+        def train_gaussian(ae, sequences, channel):
+            ae.eval()
+            train_gaussian_loader = DataLoader(dataset=sequences,
+                    batch_size=self.batch_size, drop_last=True,
+                    pin_memory=True)
+            
+            error_vectors = []
+            error_loss = nn.L1Loss(reduce=False)
+            for ts_batch in train_gaussian_loader:
+                output = ae(self.to_var(ts_batch))
+                error = error_loss(output, self.to_var(ts_batch.float()))
+                error_vector = error.view(-1, 1).data.cpu().numpy()
+                error_vector = list(error_vector)
+                error_vectors += error_vector
+            return error_vectors
+
+        # error_vectors = []
+        # for channel, ae in enumerate(self.ae_list):
+            # error_vectors = train_gaussian(ae, seq_val[:, :, channel], channel)
+            # error_vectors.append(error_vectors)
+        # error_vectors = np.hstack(error_vectors)
+
         error_vectors = []
         for ts_batch in train_gaussian_loader:
             output = [ae(self.to_var(ts_batch[:, :, channel]))
@@ -97,16 +129,13 @@ class AutoCorrelationEncoder(Algorithm, PyTorchUtils):
                                   lr=self.lr, hidden_size=self.hidden_size,
                                   sequence_length=1, seed=self.seed,
                                   gpu=self.gpu, details=self.details)
-        df_enc = self.generate_enc(data_loader=train_loader)
+        predict_loader = DataLoader(dataset=sequences,
+                batch_size=self.batch_size, drop_last=True, pin_memory=True)
+        df_enc = self.generate_enc(data_loader=predict_loader)
         self.ae_rhs.fit(df_enc)
 
     def predict(self, X, return_subscores=False):
-        X.interpolate(inplace=True)
-        X.bfill(inplace=True)
-        data = X.values
-        n_sequences = data.shape[0] - self.sequence_length + 1
-        sequences = [data[i:i + self.sequence_length]
-                     for i in range(0, n_sequences, self.stride)]
+        sequences = make_sequences(data=X, sequence_length=self.sequence_length)
         data_loader = DataLoader(dataset=sequences, batch_size=self.batch_size,
                                  shuffle=False, drop_last=False)
 
@@ -149,7 +178,7 @@ class AutoCorrelationEncoder(Algorithm, PyTorchUtils):
         if self.details:
             outputs = np.concatenate(outputs)
             lattice = np.full((self.sequence_length, X.shape[0], X.shape[1]),
-                              np.nan)
+                               np.nan)
             for idx, output in enumerate(outputs):
                 i = idx * self.stride
                 lattice_start = i % self.sequence_length
