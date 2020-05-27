@@ -19,12 +19,24 @@ class OSIMABDataset(RealDataset):
 
     def get_data_osimab(self):
         df = pd.read_csv(self.processed_path)
+
         n_train = int(df.shape[0] * 0.7)
         train = df.iloc[:n_train]
-        scaler = StandardScaler()
-        train = pd.DataFrame(scaler.fit_transform(train), columns=train.columns)
         test = df.iloc[n_train:]
-        test = pd.DataFrame(scaler.transform(test), columns=test.columns)
+
+        scaler = StandardScaler()
+        scaler.fit(train)
+        train = standardize(train, scaler)
+        test = standardize(test, scaler)
+
         train_label = pd.Series(np.zeros(train.shape[0]))
         test_label = pd.Series(np.zeros(test.shape[0]))
+
         return (train, train_label), (test, test_label)
+
+
+def standardize(df, scaler):
+    columns = df.columns
+    data = scaler.transform(df)
+    return pd.DataFrame(data, columns=columns)
+
