@@ -140,7 +140,7 @@ class AutoCorrelationEncoder(Algorithm, PyTorchUtils):
                                  shuffle=False, drop_last=False)
 
         for ae in self.ae_list:
-            ae.train()
+            ae.eval()
         mvnormal = multivariate_normal(self.mean, self.cov,
                                        allow_singular=True)
         scores_lhs = []
