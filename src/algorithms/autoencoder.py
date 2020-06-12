@@ -16,9 +16,11 @@ from .helpers import average_sequences
 
 
 class AutoEncoder(Algorithm, PyTorchUtils):
-    def __init__(self, name: str='AutoEncoder', num_epochs: int=10, batch_size: int=20, lr: float=1e-3,
-                 hidden_size: int=5, sequence_length: int=30, train_gaussian_percentage: float=0.25,
-                 seed: int=None, gpu: int=None, details=True, train_max=None):
+    def __init__(self, name: str='AutoEncoder', num_epochs: int=10,
+                batch_size: int=20, lr: float=1e-3,
+                hidden_size: int=5, sequence_length: int=30, stride: int=1,
+                train_gaussian_percentage: float=0.25, seed: int=None,
+                gpu: int=None, details=True, train_max=None):
         Algorithm.__init__(self, __name__, name, seed, details=details)
         PyTorchUtils.__init__(self, seed, gpu)
         self.num_epochs = num_epochs
@@ -28,14 +30,16 @@ class AutoEncoder(Algorithm, PyTorchUtils):
         self.input_size = None
         self.hidden_size = hidden_size
         self.sequence_length = sequence_length
+        self.stride = stride
         self.train_gaussian_percentage = train_gaussian_percentage
         self.train_max = train_max
 
         self.aed = None
         self.mean, self.cov = None, None
 
+
     def fit(self, X: pd.DataFrame):
-        sequences = make_sequences(data=X, sequence_length=self.sequence_length)
+        sequences = make_sequences(data=X, sequence_length=self.sequence_length, stride = self.stride)
         seq_train, seq_val = split_sequences(sequences, self.train_gaussian_percentage)
         train_loader = DataLoader(dataset=seq_train, batch_size=self.batch_size,
                 drop_last=True, pin_memory=True)
@@ -69,7 +73,7 @@ class AutoEncoder(Algorithm, PyTorchUtils):
         self.cov = np.cov(error_vectors, rowvar=False)
 
     def predict(self, X: pd.DataFrame) -> np.array:
-        sequences = make_sequences(data=X, sequence_length=self.sequence_length)
+        sequences = make_sequences(data=X, sequence_length=self.sequence_length, stride = self.stride)
         data_loader = DataLoader(dataset=sequences, batch_size=self.batch_size,
                 shuffle=False, drop_last=False)
 

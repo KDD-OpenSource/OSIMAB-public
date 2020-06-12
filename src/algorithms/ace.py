@@ -45,7 +45,7 @@ class AutoCorrelationEncoder(Algorithm, PyTorchUtils):
         self.mean, self.cov = None, None
 
     def fit(self, X):
-        sequences = make_sequences(data=X, sequence_length=self.sequence_length)
+        sequences = make_sequences(data=X, sequence_length=self.sequence_length, stride = self.stride)
         seq_train, seq_val = split_sequences(sequences, self.train_gaussian_percentage)
         indices = np.random.permutation(len(sequences))
         split_point = len(sequences) - int(self.train_gaussian_percentage * len(sequences))
@@ -53,9 +53,13 @@ class AutoCorrelationEncoder(Algorithm, PyTorchUtils):
         train_gaussian_loader = DataLoader(dataset=sequences, batch_size=self.batch_size, drop_last=True,
                                            sampler=SubsetRandomSampler(indices[split_point:]), pin_memory=True)
 
-        self.ae_list = [AutoEncoderModule(1, self.sequence_length, self.hidden_size, seed=self.seed,
-                                          gpu=self.gpu)
-                        for _ in range(X.shape[1])]
+        self.ae_list = [AutoEncoderModule(
+            1,
+            self.sequence_length,
+            self.hidden_size,
+            seed=self.seed,
+            gpu=self.gpu)
+            for _ in range(X.shape[1])]
 
         def train_ae(ae, sequences, channel, lr):
             self.to_device(ae)
@@ -135,7 +139,7 @@ class AutoCorrelationEncoder(Algorithm, PyTorchUtils):
         self.ae_rhs.fit(df_enc)
 
     def predict(self, X, return_subscores=False):
-        sequences = make_sequences(data=X, sequence_length=self.sequence_length)
+        sequences = make_sequences(data=X, sequence_length=self.sequence_length, stride = self.stride)
         data_loader = DataLoader(dataset=sequences, batch_size=self.batch_size,
                                  shuffle=False, drop_last=False)
 
@@ -176,27 +180,40 @@ class AutoCorrelationEncoder(Algorithm, PyTorchUtils):
         scores = scores_lhs + scores_rhs
 
         if self.details:
-            outputs = np.concatenate(outputs)
-            lattice = np.full((self.sequence_length, X.shape[0], X.shape[1]),
-                               np.nan)
-            for idx, output in enumerate(outputs):
-                i = idx * self.stride
-                lattice_start = i % self.sequence_length
-                lattice[lattice_start, i:i + self.sequence_length, :] = output
-            rec_mean = np.nanmean(lattice, axis=0).T
-            self.prediction_details.update({'reconstructions_mean': rec_mean})
+            outputs_avg = average_sequences(
+                outputs,
+                self.sequence_length,
+                (X.shape[0], X.shape[1]),
+                stride = self.stride
+                )
+            self.prediction_details.update({'reconstructions_mean': outputs_avg})
 
-            errors = np.concatenate(errors)
-            lattice = np.full((self.sequence_length, X.shape[0], X.shape[1]),
-                               np.nan)
-            for idx, error in enumerate(errors):
-                i = idx * self.stride
-                lattice_start = i % self.sequence_length
-                lattice[lattice_start, i:i + self.sequence_length, :] = error
-            self.prediction_details.update({'errors_mean':
-                                            np.nanmean(lattice, axis=0).T})
+            errors_avg = average_sequences(
+                errors,
+                self.sequence_length,
+                (X.shape[0], X.shape[1]),
+                stride = self.stride
+                )
+            self.prediction_details.update({'errors_mean': errors_avg})
+
+            ae_rhs_errors = self.ae_rhs.prediction_details['errors_mean'].T
+            err_shape = (ae_rhs_errors.shape[0], len(self.ae_list),-1)
+            ae_rhs_errors = ae_rhs_errors.reshape(err_shape).transpose(0,2,1)
+            # ae_rhs_errors_summed must be a list, because otherwise 'average_
+            # sequences' destroys its shape
+            import pdb; pdb.set_trace()
+            #ae_rhs_errors = [np.square(ae_rhs_errors.sum(axis = 1))]
+            ae_rhs_errors = [ae_rhs_errors.sum(axis = 1)]
+            ae_rhs_errors_avg = average_sequences(
+                ae_rhs_errors,
+                self.sequence_length,
+                (X.shape[0], X.shape[1]),
+                stride = self.stride
+                )
+            self.prediction_details.update({'errors_rhs_mean': ae_rhs_errors_avg})
 
         return (scores, scores_lhs, scores_rhs) if return_subscores else scores
+
 
     def generate_enc(self, data_loader):
         encodings = []
