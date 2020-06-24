@@ -7,7 +7,16 @@ from pycatmanread.catmanread import CatmanRead
 
 
 def catman_to_df(files, columns=None, standardize=True):
-    """ convert file or list of files to list of pd.DataFrames """
+    """
+    convert file or list of files to list of pd.DataFrames
+
+    :param files: List of file names or single file name
+    :param columns: List of column regex.  If None, all columns are selected
+        Example: ['F1', 'F2'] selects ['N_F1_WA', 'S_F1_ACC', 'N_F2_WA', ...]
+        Note: '.*' at beginning and end can be omitted
+    :param standardize: If True, mean and variance of all files is standardized
+    """
+
     if not isinstance(files, (str, list)):
         raise TypeError('files must be str or list. '
                 'Was {}'.format(type(files)))
@@ -19,7 +28,7 @@ def catman_to_df(files, columns=None, standardize=True):
     for cm_file in files:
         df = read_catman_file(cm_file)
         if columns is not None:
-            df = df[columns]
+            df = df.filter(regex='|'.join(columns))
         df_list.append(df)
 
     if standardize:
