@@ -1,4 +1,6 @@
 import re
+import glob
+import os
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
@@ -42,7 +44,8 @@ def catman_to_df(files, columns=None, standardize=True):
 
 def read_catman_file(file_name):
     cm_reader = CatmanRead()
-    cm_reader.open_file(file_name)
+    #cm_reader.open_file(file_name)
+    cm_reader.open_sevenzip(file_name)
     cm_reader.read_all_header_data()
 
     info_df = cm_reader.channel_info_to_df()
@@ -65,10 +68,28 @@ def read_catman_file(file_name):
         data_dict[channel_name] = channel_interp
     data_df = pd.DataFrame(data_dict)
     return data_df
-    
 
 def standardize_df(df, scaler):
     columns = df.columns
     data = scaler.transform(df)
     return pd.DataFrame(data, columns=columns)
 
+def main():
+    files = glob.glob('./OSIMABData_03_12/*')
+
+    sensorData = catman_to_df(files)
+    sensorDataFiltered = []
+    regexs = ['F3']
+    # regexs = ['F'+str(i) for i in range(1,7)]
+    for df in sensorData:
+        filteredDF = pd.DataFrame()
+        for regex in regexs:
+            tmp = df.filter(regex = regex)
+            filteredDF = pd.concat([filteredDF, tmp], axis = 1)
+        sensorDataFiltered.append(filteredDF)
+    for index in range(len(files)):
+        sensorDataFiltered[index].to_csv('OSIMABData_03_12_'+str(index)+'.csv', index = False)
+
+
+if __name__ == '__main__':
+    main()

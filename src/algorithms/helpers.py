@@ -8,12 +8,12 @@ def average_sequences(sequences, sequence_length, output_shape, stride=1):
     sequences = np.concatenate(sequences)
     lattice = np.full((sequence_length, *output_shape), np.nan) 
     for i, sequence in enumerate(sequences):
-        lattice[i % sequence_length, i:i + sequence_length] = sequence
+        lattice[i*stride % sequence_length, i*stride:i*stride + sequence_length] = sequence
     sequences = np.nanmean(lattice, axis=0).T
     return sequences
 
 
-def make_sequences(data, sequence_length, stride=0):
+def make_sequences(data, sequence_length, stride=1):
     if not isinstance(data, (pd.DataFrame, list)):
         raise TypeError('data must be of type pd.DataFrame or list.'
             'The type of data was {}.'.format(type(data)))
@@ -27,8 +27,8 @@ def make_sequences(data, sequence_length, stride=0):
         df = df.bfill()
         df = df.values
 
-        n_sequences = df.shape[0] - sequence_length + 1
-        sequences = [df[i:i + sequence_length] for i in range(n_sequences)]
+        n_sequences = int((df.shape[0] - sequence_length)/stride) + 1
+        sequences = [df[i*stride:i*stride + sequence_length] for i in range(n_sequences)]
         sequences = np.array(sequences)
         seq_list.append(sequences)
 
