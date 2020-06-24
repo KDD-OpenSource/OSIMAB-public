@@ -44,8 +44,10 @@ def catman_to_df(files, columns=None, standardize=True):
 
 def read_catman_file(file_name):
     cm_reader = CatmanRead()
-    #cm_reader.open_file(file_name)
-    cm_reader.open_sevenzip(file_name)
+    if re.match('.*\.bin$', file_name):
+        cm_reader.open_file(file_name)
+    else:
+        cm_reader.open_sevenzip(file_name)
     cm_reader.read_all_header_data()
 
     info_df = cm_reader.channel_info_to_df()
@@ -69,10 +71,12 @@ def read_catman_file(file_name):
     data_df = pd.DataFrame(data_dict)
     return data_df
 
+
 def standardize_df(df, scaler):
     columns = df.columns
     data = scaler.transform(df)
     return pd.DataFrame(data, columns=columns)
+
 
 def main():
     files = glob.glob('./OSIMABData_03_12/*')
