@@ -23,7 +23,7 @@ class AutoCorrelationEncoder(Algorithm, PyTorchUtils):
                  num_epochs: int = 10, batch_size: int = 20, lr: float = 1e-3, hidden_size: int = 5,
                  sequence_length: int = 30, stride: int=1, train_gaussian_percentage: float = 0.25,
                  n_layers: tuple = (1, 1), use_bias: tuple = (True, True), dropout: tuple = (0, 0), seed: int = None,
-                 gpu: int = None, details=True, train_max=math.inf):
+                 gpu: int = None, details=True, train_max=math.inf, use_threading=False):
         Algorithm.__init__(self, __name__, name, seed, details=details)
         PyTorchUtils.__init__(self, seed, gpu)
         self.num_epochs = num_epochs
@@ -43,6 +43,8 @@ class AutoCorrelationEncoder(Algorithm, PyTorchUtils):
         self.ae_list = []
         self.ae_rhs = None
         self.mean, self.cov = None, None
+
+        self.use_threading = use_threading
 
     def fit(self, X):
         sequences = make_sequences(data=X, sequence_length=self.sequence_length)
@@ -73,16 +75,20 @@ class AutoCorrelationEncoder(Algorithm, PyTorchUtils):
                     loss_channel.backward()
                     optimizer.step()
 
-        thread_dict = {}
-        for channel, ae in enumerate(self.ae_list):
-            seq_channel = seq_train[:, :, channel]
-            thread = threading.Thread(target=train_ae, args=(ae, seq_channel,
-                channel, self.lr))
-            thread.start()
-            thread_dict[ae] = thread
-
-        for ae in self.ae_list:
-            thread_dict[ae].join()
+        if self.use_threading:
+            thread_dict = {}
+            for channel, ae in enumerate(self.ae_list):
+                seq_channel = seq_train[:, :, channel]
+                thread = threading.Thread(target=train_ae, args=(ae, seq_channel,
+                    channel, self.lr))
+                thread.start()
+                thread_dict[ae] = thread
+            for ae in self.ae_list:
+                thread_dict[ae].join()
+        else:
+            for channel, ae in enumerate(self.ae_list):
+                seq_channel = seq_train[:, :, channel]
+                train_ae(ae, seq_channel, channel, self.lr)
 
         for ae in self.ae_list:
             ae.eval()
