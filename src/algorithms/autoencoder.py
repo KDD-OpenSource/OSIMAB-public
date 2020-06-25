@@ -46,7 +46,7 @@ class AutoEncoder(Algorithm, PyTorchUtils):
         train_gaussian_loader = DataLoader(dataset=seq_val,
                 batch_size=self.batch_size, drop_last=True, pin_memory=True)
 
-        self.input_size = X.shape[1]
+        self.input_size = sequences.shape[2]
         self.aed = AutoEncoderModule(self.input_size, self.sequence_length, self.hidden_size, seed=self.seed,
                                      gpu=self.gpu)
         self.to_device(self.aed)  # .double()
@@ -81,14 +81,16 @@ class AutoEncoder(Algorithm, PyTorchUtils):
         mvnormal = multivariate_normal(self.mean, self.cov, allow_singular=True)
         scores = []
         outputs = []
+        encodings = []
         errors = []
         for idx, ts in enumerate(data_loader):
-            output = self.aed(self.to_var(ts))
+            output, enc = self.aed(self.to_var(ts), return_latent=True)
             error = nn.L1Loss(reduce=False)(output, self.to_var(ts.float()))
             score = -mvnormal.logpdf(error.view(-1, X.shape[1]).data.cpu().numpy())
             scores.append(score.reshape(ts.size(0), self.sequence_length))
             if self.details:
                 outputs.append(output.data.numpy())
+                encodings.append(enc)
                 errors.append(error.data.numpy())
 
         # stores seq_len-many scores per timestamp and averages them
@@ -109,6 +111,10 @@ class AutoEncoder(Algorithm, PyTorchUtils):
                     sequence_length=self.sequence_length,
                     output_shape=(X.shape[0], X.shape[1]))
             self.prediction_details.update({'errors_mean': errors})
+
+            encodings = [e.detach().numpy() for e in encodings]
+            encodings =  np.concatenate(encodings)
+            self.prediction_details.update({'encodings': encodings})
 
         return scores
 
