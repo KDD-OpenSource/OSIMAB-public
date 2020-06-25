@@ -207,7 +207,6 @@ class AutoCorrelationEncoder(Algorithm, PyTorchUtils):
             ae_rhs_errors = ae_rhs_errors.reshape(err_shape).transpose(0,2,1)
             # ae_rhs_errors_summed must be a list, because otherwise 'average_
             # sequences' destroys its shape
-            import pdb; pdb.set_trace()
             #ae_rhs_errors = [np.square(ae_rhs_errors.sum(axis = 1))]
             ae_rhs_errors = [ae_rhs_errors.sum(axis = 1)]
             ae_rhs_errors_avg = average_sequences(
