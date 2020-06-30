@@ -15,7 +15,7 @@ from .algorithm_utils import Algorithm, PyTorchUtils
 class AutoEncoderJO(Algorithm, PyTorchUtils):
     def __init__(self, name: str='AutoEncoderJO', num_epochs: int=10, batch_size: int=20, lr: float=1e-3,
                  hidden_size1: int=5, hidden_size2: int=2, sequence_length: int=30, train_gaussian_percentage: float=0.25,
-                 seed: int=None, gpu: int=None, details=True, train_max=None, sensor_specific = False):
+                 seed: int=123, gpu: int=None, details=True, train_max=None, sensor_specific = True):
         Algorithm.__init__(self, __name__, name, seed, details=details)
         PyTorchUtils.__init__(self, seed, gpu)
         self.num_epochs = num_epochs
@@ -227,12 +227,12 @@ class ACEModule(nn.Module, PyTorchUtils):
         layers_rhs = np.array([[nn.Linear(int(a), int(b)), nn.Tanh()] for a, b in dec_setup.reshape(-1, 2)]).flatten()[:-1]
         self._decoder_rhs = nn.Sequential(*layers_rhs)
         self.to_device(self._decoder_rhs)
-
+    
     def forward(self, ts_batch, return_latent: bool=False):
         enc = []
         dec = []
         for k in range(self.channels):
-            enc.append(self._encoder[k](ts_batch[:, k, :].float()).unsqueeze(1))
+            enc.append(self._encoder[k](ts_batch[:, :, k].float()).unsqueeze(1))
             dec.append(self._decoder[k](enc[k]).unsqueeze(1))
         enc = torch.cat(enc, dim=1)
         dec = torch.cat(dec, dim=1)
