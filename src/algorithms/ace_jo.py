@@ -12,8 +12,8 @@ from tqdm import trange
 from .algorithm_utils import Algorithm, PyTorchUtils
 
 
-class AutoEncoder(Algorithm, PyTorchUtils):
-    def __init__(self, name: str='AutoEncoder_ace', num_epochs: int=10, batch_size: int=20, lr: float=1e-3,
+class AutoEncoderJO(Algorithm, PyTorchUtils):
+    def __init__(self, name: str='AutoEncoderJO', num_epochs: int=10, batch_size: int=20, lr: float=1e-3,
                  hidden_size1: int=5, hidden_size2: int=2, sequence_length: int=30, train_gaussian_percentage: float=0.25,
                  seed: int=None, gpu: int=None, details=True, train_max=None, sensor_specific = False):
         Algorithm.__init__(self, __name__, name, seed, details=details)
@@ -192,20 +192,26 @@ class ACEModule(nn.Module, PyTorchUtils):
         # Each point is a flattened window and thus has as many features as sequence_length * features
         super().__init__()
         PyTorchUtils.__init__(self, seed, gpu)
-        input_length = n_features * sequence_length
+        input_length = sequence_length
+        self.channels = n_features
 
         # creates powers of two between eight and the next smaller power from the input_length
         dec_steps = 2 ** np.arange(max(np.ceil(np.log2(hidden_size1)), 2), np.log2(input_length))[1:]
         dec_setup = np.concatenate([[hidden_size1], dec_steps.repeat(2), [input_length]])
         enc_setup = dec_setup[::-1]
 
-        layers = np.array([[nn.Linear(int(a), int(b)), nn.Tanh()] for a, b in enc_setup.reshape(-1, 2)]).flatten()[:-1]
-        self._encoder = nn.Sequential(*layers)
-        self.to_device(self._encoder)
+        self._encoder = []
+        self._decoder = []
+        for k in range(self.channels):
+            layers = np.array([[nn.Linear(int(a), int(b)), nn.Tanh()] for a, b in enc_setup.reshape(-1, 2)]).flatten()[:-1]
+            _encoder_tmp = nn.Sequential(*layers)
+            self.to_device(_encoder_tmp)
+            self._encoder.append(_encoder_tmp)
 
-        layers = np.array([[nn.Linear(int(a), int(b)), nn.Tanh()] for a, b in dec_setup.reshape(-1, 2)]).flatten()[:-1]
-        self._decoder = nn.Sequential(*layers)
-        self.to_device(self._decoder)
+            layers = np.array([[nn.Linear(int(a), int(b)), nn.Tanh()] for a, b in dec_setup.reshape(-1, 2)]).flatten()[:-1]
+            _decoder_tmp = nn.Sequential(*layers)
+            self.to_device(_decoder_tmp)
+            self._decoder.append(_decoder_tmp)
 
         input_length = n_features * hidden_size1
 
@@ -223,9 +229,13 @@ class ACEModule(nn.Module, PyTorchUtils):
         self.to_device(self._decoder_rhs)
 
     def forward(self, ts_batch, return_latent: bool=False):
-        flattened_sequence = ts_batch.view(ts_batch.size(0), -1)
-        enc = self._encoder(flattened_sequence.float())
-        dec = self._decoder(enc)
+        enc = []
+        dec = []
+        for k in range(self.channels):
+            enc.append(self._encoder[k](ts_batch[:, k, :].float()).unsqueeze(1))
+            dec.append(self._decoder[k](enc[k]).unsqueeze(1))
+        enc = torch.cat(enc, dim=1)
+        dec = torch.cat(dec, dim=1)
         reconstructed_sequence = dec.view(ts_batch.size())
 
         enc_rhs = self._encoder_rhs(enc.view((ts_batch.size()[0], -1)))
