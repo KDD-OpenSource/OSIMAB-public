@@ -160,7 +160,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             self.prediction_details.update({'errors_mean': np.nanmean(lattice, axis=0).T})
 
         scores_rhs = np.concatenate(scores_rhs)
-        return scores, scores_rhs
+        return scores+scores_rhs
 
     
 
