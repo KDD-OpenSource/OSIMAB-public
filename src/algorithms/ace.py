@@ -217,6 +217,9 @@ class AutoCorrelationEncoder(Algorithm, PyTorchUtils):
                 )
             self.prediction_details.update({'errors_rhs_mean': ae_rhs_errors_avg})
 
+            encodings = self.ae_rhs.prediction_details['encodings']
+            self.prediction_details.update({'encodings': encodings})
+
         return (scores, scores_lhs, scores_rhs) if return_subscores else scores
 
 
