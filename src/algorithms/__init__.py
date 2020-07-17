@@ -10,6 +10,7 @@ from .lstm_ad import LSTMAD
 from .lstm_enc_dec_axl import LSTMED
 from .lstm_enc_dec_par import LSTMEDP
 from .rnn_ebm import RecurrentEBM
+from .ace_jo import AutoEncoderJO
 
 __all__ = [
     'AutoEncoder',
@@ -23,5 +24,6 @@ __all__ = [
     'LSTMAD',
     'LSTMED',
     'LSTMEDP',
-    'RecurrentEBM'
+    'RecurrentEBM',
+    'AutoEncoderJO'
 ]

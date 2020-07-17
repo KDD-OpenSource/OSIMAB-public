@@ -16,17 +16,18 @@ from .helpers import average_sequences
 
 
 class AutoEncoder(Algorithm, PyTorchUtils):
-    def __init__(self, name: str='AutoEncoder', num_epochs: int=10,
+    def __init__(self, name: str='AutoEncoder', num_epochs: int=10, 
                 batch_size: int=20, lr: float=1e-3,
                 hidden_size: int=5, sequence_length: int=30, stride: int=1,
                 train_gaussian_percentage: float=0.25, seed: int=None,
-                gpu: int=None, details=True, train_max=None):
+                gpu: int=None, details=True, train_max=None,
+                sensor_specific = False):
         Algorithm.__init__(self, __name__, name, seed, details=details)
         PyTorchUtils.__init__(self, seed, gpu)
         self.num_epochs = num_epochs
         self.batch_size = batch_size
         self.lr = lr
-
+        self.sensor_specific = sensor_specific
         self.input_size = None
         self.hidden_size = hidden_size
         self.sequence_length = sequence_length
@@ -37,6 +38,17 @@ class AutoEncoder(Algorithm, PyTorchUtils):
         self.aed = None
         self.mean, self.cov = None, None
 
+    def SensorSpecificLoss(self, yhat, y):
+        # mse = nn.MSELoss()
+        # batch_size = yhat.size()[0]
+        subclassLength=self.hidden_size
+        yhat = yhat.view((-1, subclassLength))
+        y = y.view((-1, subclassLength))
+        error = yhat - y
+        sqr_err = error ** 2
+        sum_sqr_err = sqr_err.sum(1)
+        root_sum_sqr_err = torch.sqrt(sum_sqr_err)
+        return torch.mean(root_sum_sqr_err)
 
     def fit(self, X: pd.DataFrame):
         sequences = make_sequences(data=X, sequence_length=self.sequence_length, stride = self.stride)
@@ -57,7 +69,10 @@ class AutoEncoder(Algorithm, PyTorchUtils):
             logging.debug(f'Epoch {epoch+1}/{self.num_epochs}.')
             for ts_batch in train_loader:
                 output = self.aed(self.to_var(ts_batch))
-                loss = nn.MSELoss(size_average=False)(output, self.to_var(ts_batch.float()))
+                if not self.sensor_specific:
+                    loss = nn.MSELoss(size_average=False)(output, self.to_var(ts_batch.float()))
+                else:
+                    loss = self.SensorSpecificLoss(output, self.to_var(ts_batch.float()))
                 self.aed.zero_grad()
                 loss.backward()
                 optimizer.step()

@@ -138,7 +138,8 @@ class AutoCorrelationEncoder(Algorithm, PyTorchUtils):
                                   batch_size=self.batch_size,
                                   lr=self.lr, hidden_size=self.hidden_size,
                                   sequence_length=1, seed=self.seed,
-                                  gpu=self.gpu, details=self.details)
+                                  gpu=self.gpu, details=self.details,
+                                  sensor_specific=True)
         predict_loader = DataLoader(dataset=sequences,
                 batch_size=self.batch_size, drop_last=True, pin_memory=True)
         df_enc = self.generate_enc(data_loader=predict_loader)

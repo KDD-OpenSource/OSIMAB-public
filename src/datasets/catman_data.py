@@ -80,6 +80,7 @@ def standardize_df(df, scaler):
 
 def main():
     files = glob.glob('./OSIMABData_03_12/*')
+    files = glob.glob('/osimab/data/itc-prod2.com/*03_12*.zip')
 
     sensorData = catman_to_df(files)
     sensorDataFiltered = []
