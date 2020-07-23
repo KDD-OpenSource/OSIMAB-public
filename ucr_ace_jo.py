@@ -5,7 +5,7 @@ from src.algorithms import AutoEncoderJO
 
 def detectors(seed):
     standard_epochs = 20
-    dets = [AutoEncoderJO(num_epochs=standard_epochs, seed=seed)]
+    dets = [AutoEncoderJO(num_epochs=standard_epochs, seed=seed, sequence_length=8)]
 
     return sorted(dets, key=lambda x: x.framework)
 
