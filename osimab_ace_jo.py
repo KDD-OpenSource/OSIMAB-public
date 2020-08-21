@@ -8,10 +8,18 @@ from src.algorithms import LSTMED
 from src.algorithms import AutoEncoderJO
 from src.algorithms import AutoCorrelationEncoder
 
+import random
+
 
 def detectors(seed):
-    standard_epochs = 4
-    dets = [AutoEncoderJO(num_epochs=standard_epochs, seed=seed)]
+    standard_epochs = 10
+    dets = [AutoEncoderJO(num_epochs=standard_epochs,
+        hidden_size1 = 5,
+        hidden_size2 = 5,
+        lr = 1e-5,
+        sequence_length = 100,
+        #train_max = 1000,
+        seed=seed)]
 
     return sorted(dets, key=lambda x: x.framework)
 
@@ -21,8 +29,15 @@ def main():
 
 
 def evaluate_osimab_jo():
-    seed = 0
-    datasets = [OSIMABDataset(file_name='tuesday_test_30min.csv')]
+    #seed = random.randint(0,100)
+    seed = 42
+    datasets = [
+            #OSIMABDataset(file_name='OSIMAB_04_01_19_F6_ACC_S1.csv')
+            #OSIMABDataset(file_name='OSIMAB_04_01_19_F6_INC_1.csv')
+            #OSIMABDataset(file_name='OSIMAB_04_01_19_F6_SG_1_NU.csv')
+            #OSIMABDataset(file_name='OSIMAB_04_01_19_F6_WA_SO.csv')
+            OSIMABDataset(file_name='OSIMABData_04_01_19_F6_SG.csv')
+            ]
     evaluator = Evaluator(datasets, detectors, seed=seed)
     evaluator.evaluate()
     result = evaluator.benchmarks()

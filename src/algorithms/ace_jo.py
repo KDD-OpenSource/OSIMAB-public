@@ -13,7 +13,7 @@ from .algorithm_utils import Algorithm, PyTorchUtils
 
 
 class AutoEncoderJO(Algorithm, PyTorchUtils):
-    def __init__(self, name: str='AutoEncoderJO', num_epochs: int=10, batch_size: int=20, lr: float=1e-3,
+    def __init__(self, name: str='AutoEncoderJO', num_epochs: int=10, batch_size: int=20, lr: float=1e-4,
                  hidden_size1: int=5, hidden_size2: int=2, sequence_length: int=30, train_gaussian_percentage: float=0.25,
                  seed: int=123, gpu: int=None, details=True, train_max=None, sensor_specific = True):
         Algorithm.__init__(self, __name__, name, seed, details=details)
@@ -43,7 +43,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         sqr_err = error ** 2
         sum_sqr_err = sqr_err.sum(1)
         root_sum_sqr_err = torch.sqrt(sum_sqr_err)
-        return torch.mean(root_sum_sqr_err)
+        return root_sum_sqr_err
 
     def fit(self, X: pd.DataFrame):
         X.interpolate(inplace=True)
@@ -68,20 +68,30 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         self.aed.train()
         alpha = 1
         beta = 1e-3
+        #beta = 0
         for epoch in trange(self.num_epochs):
+            latentSpace = []
             logging.debug(f'Epoch {epoch+1}/{self.num_epochs}.')
             for ts_batch in train_loader:
                 output = self.aed(self.to_var(ts_batch), return_latent=True)
+                latentSpace.append(output[2])
                 loss1 = nn.MSELoss(size_average=False)(output[0], self.to_var(ts_batch.float()))
                 if not self.sensor_specific:
                     loss2 = nn.MSELoss(size_average=False)(output[1], output[2].view((ts_batch.size()[0], -1)).data)
                 else:
-                    loss2 = self.SensorSpecificLoss(output[1], output[2].view((ts_batch.size()[0], -1)).data)
+                    loss2 = torch.mean(self.SensorSpecificLoss(output[1],
+                        output[2].view((ts_batch.size()[0], -1)).data))
                 self.aed.zero_grad()
                 (alpha*loss1 + beta*loss2).backward()
                 optimizer.step()
             alpha/=2
             beta*=2
+            latentSpace = np.vstack(list(map(lambda x:x.detach().numpy(),
+                latentSpace)))
+            print('Mean of Latent Space is:')
+            print(latentSpace.mean(axis = 0))
+            print('Standard Deviation of Latent Space is:')
+            print(latentSpace.std(axis = 0))
 
         self.aed.eval()
         error_vectors = []
@@ -165,6 +175,20 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 lattice[i % self.sequence_length, i:i + self.sequence_length, :] = error
             self.prediction_details.update({'errors_mean': np.nanmean(lattice, axis=0).T})
 
+            # Adding the rhs error by summing it for each sensor and then
+            # spreading it over the length of the timeseries
+            errors_rhs = np.concatenate(errors_rhs)
+            lattice = np.full((self.sequence_length, X.shape[0], X.shape[1]), np.nan)
+            for i, error_rhs in enumerate(errors_rhs):
+                error_rhs = error_rhs.reshape(self.hidden_size1,
+                        -1).sum(axis=0)
+                error_rhs = error_rhs.repeat(
+                        self.sequence_length).reshape(X.shape[1],
+                                self.sequence_length).transpose()
+                lattice[i % self.sequence_length, i:i + self.sequence_length,
+                        :] = error_rhs
+            self.prediction_details.update({'errors_mean_rhs': np.nanmean(lattice, axis=0).T})
+
         return scores_lhs + scores_rhs
 
     def save(self, f):
@@ -204,11 +228,14 @@ class ACEModule(nn.Module, PyTorchUtils):
         dec_setup = np.concatenate([[hidden_size1], dec_steps.repeat(2), [input_length]])
         enc_setup = dec_setup[::-1]
 
-        self._encoder = []
-        self._decoder = []
+        #self._encoder = []
+        self._encoder = nn.ModuleList()
+        #self._decoder = []
+        self._decoder = nn.ModuleList()
         for k in range(self.channels):
             layers = np.array([[nn.Linear(int(a), int(b)), nn.Tanh()] for a, b in enc_setup.reshape(-1, 2)]).flatten()[:-1]
             _encoder_tmp = nn.Sequential(*layers)
+            #_encoder_tmp = nn.Parameter(nn.Sequential(*layers))
             self.to_device(_encoder_tmp)
             self._encoder.append(_encoder_tmp)
 
@@ -231,7 +258,7 @@ class ACEModule(nn.Module, PyTorchUtils):
         layers_rhs = np.array([[nn.Linear(int(a), int(b)), nn.Tanh()] for a, b in dec_setup.reshape(-1, 2)]).flatten()[:-1]
         self._decoder_rhs = nn.Sequential(*layers_rhs)
         self.to_device(self._decoder_rhs)
-    
+
     def forward(self, ts_batch, return_latent: bool=False):
         enc = []
         dec = []

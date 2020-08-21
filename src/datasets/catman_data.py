@@ -79,12 +79,12 @@ def standardize_df(df, scaler):
 
 
 def main():
-    files = glob.glob('./OSIMABData_03_12/*')
-    files = glob.glob('/osimab/data/itc-prod2.com/*03_12*.zip')
-
+    #files = glob.glob('./OSIMABData_03_12/*')
+    #files = glob.glob('/osimab/data/itc-prod2.com/*03_12*.zip')
+    files = glob.glob('/osimab/data/itc-prod2.com/*04_01_19*.zip')
     sensorData = catman_to_df(files)
     sensorDataFiltered = []
-    regexs = ['F3']
+    regexs = ['F6_WA_SO']
     # regexs = ['F'+str(i) for i in range(1,7)]
     for df in sensorData:
         filteredDF = pd.DataFrame()
@@ -93,7 +93,9 @@ def main():
             filteredDF = pd.concat([filteredDF, tmp], axis = 1)
         sensorDataFiltered.append(filteredDF)
     for index in range(len(files)):
-        sensorDataFiltered[index].to_csv('OSIMABData_03_12_'+str(index)+'.csv', index = False)
+        #sensorDataFiltered[index].to_csv('OSIMABData_03_12_'+str(index)+'.csv', index = False)
+        #sensorDataFiltered[index].to_csv('OSIMABData_04_01_19_F6_SG.csv', index = False)
+        sensorDataFiltered[index].to_csv('OSIMAB_04_01_19_F6_WA_SO.csv', index = False)
 
 
 if __name__ == '__main__':
