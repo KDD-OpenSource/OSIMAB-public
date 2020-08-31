@@ -84,18 +84,27 @@ def main():
     files = glob.glob('/osimab/data/itc-prod2.com/*04_01_19*.zip')
     sensorData = catman_to_df(files)
     sensorDataFiltered = []
-    regexs = ['F6_WA_SO']
+    regexs = ['N_F3_INC_1']
+    #numrows = 10000
+    #numrows = 100000
+    numrows = 360000
+    #temperature = True
+    temperature = False
+    if temperature:
+        regexs.append('N_F1_T_1$')
     # regexs = ['F'+str(i) for i in range(1,7)]
     for df in sensorData:
         filteredDF = pd.DataFrame()
         for regex in regexs:
-            tmp = df.filter(regex = regex)
+            tmp = df.filter(regex = regex)[:numrows]
             filteredDF = pd.concat([filteredDF, tmp], axis = 1)
         sensorDataFiltered.append(filteredDF)
+    import pdb; pdb.set_trace()
     for index in range(len(files)):
         #sensorDataFiltered[index].to_csv('OSIMABData_03_12_'+str(index)+'.csv', index = False)
         #sensorDataFiltered[index].to_csv('OSIMABData_04_01_19_F6_SG.csv', index = False)
-        sensorDataFiltered[index].to_csv('OSIMAB_04_01_19_F6_WA_SO.csv', index = False)
+        #sensorDataFiltered[index].to_csv('OSIMAB_04_01_19_F6_WA_SO.csv', index = False)
+        sensorDataFiltered[index].to_csv('OSIMAB_full_NT_INC_1.csv', index = False)
 
 
 if __name__ == '__main__':

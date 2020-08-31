@@ -10,7 +10,8 @@ class OSIMABDataset(RealDataset):
         if file_name is None:
             file_name = 'osimab-data.csv'
         super().__init__(
-            name='OSIMAB Dataset', raw_path='osimab-data', file_name=file_name
+            #name='OSIMAB Dataset', raw_path='osimab-data', file_name=file_name
+            name=file_name, raw_path='osimab-data', file_name=file_name
         )
 
     def load(self):
@@ -49,15 +50,21 @@ class OSIMABDataset(RealDataset):
         train_label = pd.Series(np.zeros(train.shape[0]))
         test_label = pd.Series(np.zeros(test.shape[0]))
 
+        dur = int(test.shape[0]/10)
         num_channels = df.shape[1]
-        idxs = np.random.choice(1500, num_channels)
-        dur = 7000
+        idxs = test.shape[0] - dur
+        idxs = np.random.choice(idxs, num_channels)
+
         for idx in idxs:
             channel = np.random.choice(num_channels,1)[0]
-            tmp = test.iloc[dur*idx:dur*(idx+1),channel]
-            tmp = tmp.shift(periods=np.random.choice(29,1)[0]+1, fill_value=np.mean(tmp))
-            test.iloc[dur*idx:dur*(idx+1),channel] = tmp
-            test_label.iloc[dur*idx:dur*(idx+1)] = 1
+            #tmp = test.iloc[dur*idx:dur*(idx+1),channel]
+            tmp = test.iloc[idx:idx+dur,channel]
+            #tmp = tmp.shift(periods=np.random.choice(100,1)[0]+1, fill_value=np.mean(tmp))
+            tmp = tmp.shift(int(dur/2), fill_value=np.mean(tmp))
+            #test.iloc[dur*idx:dur*(idx+1),channel] = tmp
+            test.iloc[idx:idx+dur,channel] = tmp
+            #test_label.iloc[dur*idx:dur*(idx+1)] = 1
+            test_label.iloc[idx:idx+dur] = 1
         test = pd.DataFrame(scaler.transform(test), columns=test.columns)
         return (train, train_label), (test, test_label)
 

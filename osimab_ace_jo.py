@@ -30,13 +30,16 @@ def main():
 
 def evaluate_osimab_jo():
     #seed = random.randint(0,100)
-    seed = 42
+    seed = 2
     datasets = [
             #OSIMABDataset(file_name='OSIMAB_04_01_19_F6_ACC_S1.csv')
             #OSIMABDataset(file_name='OSIMAB_04_01_19_F6_INC_1.csv')
             #OSIMABDataset(file_name='OSIMAB_04_01_19_F6_SG_1_NU.csv')
             #OSIMABDataset(file_name='OSIMAB_04_01_19_F6_WA_SO.csv')
-            OSIMABDataset(file_name='OSIMABData_04_01_19_F6_SG.csv')
+            #OSIMABDataset(file_name='OSIMABData_04_01_19_F6_SG.csv')
+            #OSIMABDataset(file_name='OSIMAB_full_NT_INC.csv')
+            OSIMABDataset(file_name='OSIMAB_full_NT_INC.csv')
+            #OSIMABDataset(file_name='OSIMAB_small_NT_WA.csv')
             ]
     evaluator = Evaluator(datasets, detectors, seed=seed)
     evaluator.evaluate()

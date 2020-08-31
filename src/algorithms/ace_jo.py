@@ -66,8 +66,10 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         optimizer = torch.optim.Adam(self.aed.parameters(), lr=self.lr)
 
         self.aed.train()
+        #alpha = 1
+        #beta = 1e-3
         alpha = 1
-        beta = 1e-3
+        beta = 0
         #beta = 0
         for epoch in trange(self.num_epochs):
             latentSpace = []
@@ -76,16 +78,22 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 output = self.aed(self.to_var(ts_batch), return_latent=True)
                 latentSpace.append(output[2])
                 loss1 = nn.MSELoss(size_average=False)(output[0], self.to_var(ts_batch.float()))
-                if not self.sensor_specific:
-                    loss2 = nn.MSELoss(size_average=False)(output[1], output[2].view((ts_batch.size()[0], -1)).data)
-                else:
-                    loss2 = torch.mean(self.SensorSpecificLoss(output[1],
-                        output[2].view((ts_batch.size()[0], -1)).data))
+                #import pdb; pdb.set_trace()
+                #if not self.sensor_specific:
+                    #loss2 = nn.MSELoss(size_average=False)(output[1], output[2].view((ts_batch.size()[0], -1)).data)
+                #else:
+                    #loss2 = torch.mean(self.SensorSpecificLoss(output[1],
+                        #output[2].view((ts_batch.size()[0], -1)).data))
                 self.aed.zero_grad()
-                (alpha*loss1 + beta*loss2).backward()
+                #(alpha*loss1 + beta*loss2).backward()
+                loss1.backward()
                 optimizer.step()
-            alpha/=2
-            beta*=2
+            #alpha/=2
+            #beta*=2
+            #alpha = 1 - epoch/self.num_epochs
+            #beta = epoch/self.num_epochs
+            alpha = 1
+            beta = 0
             latentSpace = np.vstack(list(map(lambda x:x.detach().numpy(),
                 latentSpace)))
             print('Mean of Latent Space is:')
