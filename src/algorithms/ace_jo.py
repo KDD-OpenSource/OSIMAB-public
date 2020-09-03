@@ -29,6 +29,8 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         self.train_gaussian_percentage = train_gaussian_percentage
         self.train_max = train_max
 
+        self.encoding_details = {}
+
         self.aed = None
         self.mean, self.cov = None, None
         self.mean_rhs, self.cov_rhs = None, None
@@ -77,25 +79,28 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             for ts_batch in train_loader:
                 output = self.aed(self.to_var(ts_batch), return_latent=True)
                 latentSpace.append(output[2])
-                loss1 = nn.MSELoss(size_average=False)(output[0], self.to_var(ts_batch.float()))
-                #import pdb; pdb.set_trace()
-                #if not self.sensor_specific:
+                #loss1 = nn.MSELoss(size_average=False)(output[0], self.to_var(ts_batch.float()))
+                loss1 = nn.MSELoss(reduction = 'sum')(output[0], self.to_var(ts_batch.float()))
+                #loss1 = nn.MSELoss(reduction = 'mean')(output[0], self.to_var(ts_batch.float()))
+                if not self.sensor_specific:
                     #loss2 = nn.MSELoss(size_average=False)(output[1], output[2].view((ts_batch.size()[0], -1)).data)
-                #else:
-                    #loss2 = torch.mean(self.SensorSpecificLoss(output[1],
-                        #output[2].view((ts_batch.size()[0], -1)).data))
+                    loss2 = nn.MSELoss(reduction = 'sum')(output[1], output[2].view((ts_batch.size()[0], -1)).data)
+                    #loss2 = nn.MSELoss(reduction = 'mean')(output[1], output[2].view((ts_batch.size()[0], -1)).data)
+                else:
+                    loss2 = torch.mean(self.SensorSpecificLoss(output[1],
+                        output[2].view((ts_batch.size()[0], -1)).data))
                 self.aed.zero_grad()
-                #(alpha*loss1 + beta*loss2).backward()
-                loss1.backward()
+                (alpha*loss1 + beta*loss2).backward()
                 optimizer.step()
             #alpha/=2
             #beta*=2
-            #alpha = 1 - epoch/self.num_epochs
-            #beta = epoch/self.num_epochs
-            alpha = 1
-            beta = 0
+            alpha = 1 - epoch/self.num_epochs
+            beta = epoch/self.num_epochs
+            #alpha = 1
+            #beta = 0
             latentSpace = np.vstack(list(map(lambda x:x.detach().numpy(),
                 latentSpace)))
+            print(f'Epoch {epoch}')
             print('Mean of Latent Space is:')
             print(latentSpace.mean(axis = 0))
             print('Standard Deviation of Latent Space is:')
@@ -106,7 +111,8 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         for ts_batch in train_gaussian_loader:
             output = self.aed(self.to_var(ts_batch))
             error = nn.L1Loss(reduce=False)(output[0], self.to_var(ts_batch.float()))
-            error_vectors += list(error.view(-1, X.shape[1]).data.cpu().numpy())
+            error_vectors += list(error.reshape(-1, X.shape[1]).data.cpu().numpy())
+            #error_vectors += list(error.view(-1, X.shape[1]).data.cpu().numpy())
 
         self.mean = np.mean(error_vectors, axis=0)
         self.cov = np.cov(error_vectors, rowvar=False)
@@ -136,13 +142,17 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         scores_lhs = []
         scores_rhs = []
         outputs = []
+
+        encodings = []
+        encodings_rhs = []
+
         outputs_rhs = []
         errors = []
         errors_rhs = []
         for idx, ts in enumerate(data_loader):
             output = self.aed(self.to_var(ts), return_latent=True)
             error = nn.L1Loss(reduce=False)(output[0], self.to_var(ts.float()))
-            score = -mvnormal.logpdf(error.view(-1, X.shape[1]).data.cpu().numpy())
+            score = -mvnormal.logpdf(error.reshape(-1, X.shape[1]).data.cpu().numpy())
             scores_lhs.append(score.reshape(ts.size(0), self.sequence_length))
 
             error_rhs = nn.L1Loss(reduce=False)(output[1], output[2].view((ts.size()[0], -1)).data)
@@ -151,6 +161,8 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
 
             if self.details:
                 outputs.append(output[0].data.numpy())
+                encodings.append(output[2].data.numpy())
+                encodings_rhs.append(output[3].data.numpy())
                 outputs_rhs.append(output[1].data.numpy())
                 errors.append(error.data.numpy())
                 errors_rhs.append(error_rhs.data.numpy())
@@ -196,6 +208,39 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 lattice[i % self.sequence_length, i:i + self.sequence_length,
                         :] = error_rhs
             self.prediction_details.update({'errors_mean_rhs': np.nanmean(lattice, axis=0).T})
+
+            import pdb; pdb.set_trace()
+            import os
+            import matplotlib.pyplot as plt
+            os.chdir('tmp')
+            encodings = np.concatenate(encodings)
+            for channel in range(self.input_size):
+                self.encoding_details.update({f'channel_{channel}':
+                    encodings[:,channel]})
+            
+            encodings = encodings.reshape((encodings.shape[0],-1))
+            origDataTMP = sequences[:1000:10]
+            i=0
+            for elem in encodings[np.random.choice(encodings.shape[0],100)]:
+                plt.plot(elem)
+                plt.savefig(f'rand_enc_{i}')
+                plt.close('all')
+                i = i+1
+            i=0
+            for elem in encodings[:1000:10]:
+                fig, ax = plt.subplots(4,1)
+                ax[0].plot(elem)
+                ax[1].plot(origDataTMP[i][:,0])
+                ax[2].plot(origDataTMP[i][:,1])
+                ax[3].plot(origDataTMP[i][:,2])
+                fig.savefig(f'enc_{i}')
+                plt.close('all')
+                i = i+1
+            os.chdir('../')
+            import pdb; pdb.set_trace()
+
+            self.encoding_details.update({'encodings': encodings})
+            
 
         return scores_lhs + scores_rhs
 
@@ -275,7 +320,8 @@ class ACEModule(nn.Module, PyTorchUtils):
             dec.append(self._decoder[k](enc[k]).unsqueeze(1))
         enc = torch.cat(enc, dim=1)
         dec = torch.cat(dec, dim=1)
-        reconstructed_sequence = dec.view(ts_batch.size())
+        reconstructed_sequence = dec.transpose(1,3).view(ts_batch.size())
+        #reconstructed_sequence = dec.view(ts_batch.size())
 
         enc_rhs = self._encoder_rhs(enc.view((ts_batch.size()[0], -1)))
         dec_rhs = self._decoder_rhs(enc_rhs)
