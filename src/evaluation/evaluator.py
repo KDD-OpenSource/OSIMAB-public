@@ -17,6 +17,7 @@ import time
 from sklearn.metrics import accuracy_score, fbeta_score
 from sklearn.metrics import precision_recall_fscore_support as prf
 from sklearn.metrics import roc_curve, auc
+from sklearn.manifold import TSNE
 from tabulate import tabulate
 
 from .config import init_logging
@@ -347,12 +348,25 @@ class Evaluator:
                 self.logger.warning('plot_details: not sure what to do')
             c = cmap(i / grid)
 
+        num_tsnePlots = len(det.encoding_details)
+        fig_enc, ax = plt.subplots(num_tsnePlots,1,
+                figsize=(15,1.5*num_tsnePlots))
+        import pdb; pdb.set_trace()
+        i = 0
+        for key, values in det.encoding_details.items():
+            enc_tsne = TSNE(n_components=2).fit_transform(values[:1000])
+            ax[i].scatter(enc_tsne[:,0], enc_tsne[:,1])
+            i = i+1
+        fig_enc.tight_layout()
+        self.store(fig_enc, f'tsne_{det.name}_{ds.name}')
+
         fig.tight_layout()
         if store:
             self.store(fig, f'details_{det.name}_{ds.name}')
         return fig
 
     # create boxplot diagrams for auc values for each algorithm/dataset per algorithm/dataset
+
     def create_boxplots(self, runs, data, detectorwise=True, store=True):
         target = 'algorithm' if detectorwise else 'dataset'
         grouped_by = 'dataset' if detectorwise else 'algorithm'
