@@ -1,4 +1,5 @@
 from .dataset import Dataset
+from .catman_dataset import CatmanDataset
 from .kdd_cup import KDDCup
 from .osimab_dataset import OSIMABDataset
 from .real_datasets import RealDataset, RealPickledDataset
@@ -11,6 +12,7 @@ __all__ = [
     'SyntheticDataset',
     'RealDataset',
     'RealPickledDataset',
+    'CatmanDataset',
     'KDDCup',
     'OSIMABDataset',
     'SyntheticDataGenerator',
