@@ -12,7 +12,7 @@ import random
 
 
 def detectors(seed):
-    standard_epochs = 1
+    standard_epochs = 10
     dets = [AutoEncoderJO(num_epochs=standard_epochs,
         hidden_size1 = 5,
         hidden_size2 = 5,
@@ -32,7 +32,7 @@ def main():
 
 def evaluate_osimab_jo():
     #seed = random.randint(0,100)
-    seed = 4
+    seed = 5
     datasets = [
             #OSIMABDataset(file_name='OSIMAB_04_01_19_F6_ACC_S1.csv')
             #OSIMABDataset(file_name='OSIMAB_04_01_19_F6_INC_1.csv')

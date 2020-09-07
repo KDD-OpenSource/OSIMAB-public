@@ -213,40 +213,35 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             import matplotlib.pyplot as plt
             os.chdir('tmp')
             encodings = np.concatenate(encodings)
+            encodings_rhs = np.concatenate(encodings_rhs)
+            outputs_rhs = np.concatenate(outputs_rhs)
             for channel in range(self.input_size):
                 self.encoding_details.update({f'channel_{channel}':
                     encodings[:,channel]})
 
-            num_plots = 100
+            num_plots = 1000
             encodings = encodings.reshape((encodings.shape[0],-1))
-            origDataTMP = sequences[:10*num_plots:10]
-            ymin_1 = 1.1*np.array(origDataTMP)[:,:,0].min()
-            ymin_2 = 1.1*np.array(origDataTMP)[:,:,1].min()
-            ymin_3 = 1.1*np.array(origDataTMP)[:,:,2].min()
-            ymax_1 = 1.1*np.array(origDataTMP)[:,:,0].max()
-            ymax_2 = 1.1*np.array(origDataTMP)[:,:,1].max()
-            ymax_3 = 1.1*np.array(origDataTMP)[:,:,2].max()
-            i=0
-            for elem in encodings[np.random.choice(encodings.shape[0],num_plots)]:
-                plt.plot(elem)
-                plt.savefig(f'rand_enc_{i}')
-                plt.close('all')
-                i = i+1
-            i=0
-            for elem in encodings[:10*num_plots:10]:
-                fig, ax = plt.subplots(4,1, figsize =(15,10))
-                ax[0].plot(elem)
-                ax[1].plot(origDataTMP[i][:,0])
-                ax[1].set_ylim([ymin_1, ymax_1])
-                ax[2].plot(origDataTMP[i][:,1])
-                ax[2].set_ylim([ymin_2, ymax_2])
-                ax[3].plot(origDataTMP[i][:,2])
-                ax[3].set_ylim([ymin_3, ymax_3])
+            outputs_rhs = outputs_rhs.reshape((encodings.shape[0],-1))
+            origDataTmp = np.array(sequences[:10*num_plots:10])
+            numChannels = origDataTmp.shape[2]
+            ylim = []
+            for channelInd in range(numChannels):
+                channelMin = origDataTmp[:,:,channelInd].min()
+                channelMax = origDataTmp[:,:,channelInd].max()
+                ylim.append([1.1*channelMin, 1.1*channelMax])
+
+            for i in range(num_plots):
+                fig, ax = plt.subplots(numChannels+3,1, figsize =(15,10))
+                ax[0].plot(encodings[i*10])
+                ax[1].plot(outputs_rhs[i*10])
+                ax[2].plot(encodings_rhs[i*10])
+                for channelInd in range(numChannels):
+                    ax[channelInd+3].plot(origDataTmp[i,:,channelInd])
+                    ax[channelInd+3].set_ylim(ylim[channelInd])
+
                 fig.savefig(f'enc_{i}')
                 plt.close('all')
-                i = i+1
             os.chdir('../')
-            import pdb; pdb.set_trace()
 
             self.encoding_details.update({'encodings': encodings})
 
