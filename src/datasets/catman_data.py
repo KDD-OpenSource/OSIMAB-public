@@ -20,8 +20,7 @@ def catman_to_df(files, columns=None, standardize=True):
     """
 
     if not isinstance(files, (str, list)):
-        raise TypeError('files must be str or list. '
-                'Was {}'.format(type(files)))
+        raise TypeError('files must be str or list. Was {}'.format(type(files)))
 
     if isinstance(files, str):
         files = [files]
@@ -109,3 +108,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

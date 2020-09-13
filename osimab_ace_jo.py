@@ -7,17 +7,20 @@ from src.algorithms import LSTMEDP
 from src.algorithms import LSTMED
 from src.algorithms import AutoEncoderJO
 from src.algorithms import AutoCorrelationEncoder
+from config import config
+import random
 
 import random
 
 
 def detectors(seed):
-    standard_epochs = 10
-    dets = [AutoEncoderJO(num_epochs=standard_epochs,
-        hidden_size1 = 5,
-        hidden_size2 = 5,
-        lr = 1e-5,
-        sequence_length = 100,
+    # Reading config
+    cfg = config(external_path="config.yaml")
+    dets = [AutoEncoderJO(num_epochs=cfg.epoch,
+        hidden_size1 = cfg.ace.hiddenSize1,
+        hidden_size2 = cfg.ace.hiddenSize2,
+        lr = cfg.ace.LR,
+        sequence_length = cfg.ace.seq_len,
         #batch_size = 2,
         sensor_specific = False,
         #train_max = 1000,
@@ -32,7 +35,8 @@ def main():
 
 def evaluate_osimab_jo():
     #seed = random.randint(0,100)
-    seed = 5
+    seed = 4
+    cfg = config(external_path="config.yaml")
     datasets = [
             #OSIMABDataset(file_name='OSIMAB_04_01_19_F6_ACC_S1.csv')
             #OSIMABDataset(file_name='OSIMAB_04_01_19_F6_INC_1.csv')

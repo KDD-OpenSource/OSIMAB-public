@@ -1,0 +1,18 @@
+
+ctx:                        'Description of the state'
+
+epoch:                      20
+
+ace:
+  seq_len:                  10
+  hiddenSize1:              5
+  hiddenSize2:              2
+  train_per:                0.99
+  LR:                       0.001
+
+testSize:                   200
+
+datatset:
+  regexp_bin:               ''
+  regexp_sensor:            ''
+  impute_anomaly:           True
