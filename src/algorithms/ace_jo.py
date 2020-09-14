@@ -219,12 +219,16 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 self.encoding_details.update({f'channel_{channel}':
                     encodings[:,channel]})
 
-            num_plots = 1000
+            num_plots = 500
             encodings = encodings.reshape((encodings.shape[0],-1))
             outputs_rhs = outputs_rhs.reshape((encodings.shape[0],-1))
             origDataTmp = np.array(sequences[:10*num_plots:10])
             numChannels = origDataTmp.shape[2]
             ylim = []
+            ylimEnc = [1.1*encodings.min(), 1.1*encodings.max()]
+            ylimOutRhs = [1.1*outputs_rhs.min(), 1.1*outputs_rhs.max()]
+            ylimEncRhs = [1.1*encodings_rhs.min(), 1.1*encodings_rhs.max()]
+            ylimLatent = [min(list([*ylimEnc,*ylimOutRhs])),max(list([*ylimEnc,*ylimOutRhs]))]
             for channelInd in range(numChannels):
                 channelMin = origDataTmp[:,:,channelInd].min()
                 channelMax = origDataTmp[:,:,channelInd].max()
@@ -233,8 +237,11 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             for i in range(num_plots):
                 fig, ax = plt.subplots(numChannels+3,1, figsize =(15,10))
                 ax[0].plot(encodings[i*10])
+                ax[0].set_ylim(ylimLatent)
                 ax[1].plot(outputs_rhs[i*10])
+                ax[1].set_ylim(ylimLatent)
                 ax[2].plot(encodings_rhs[i*10])
+                ax[2].set_ylim(ylimEncRhs)
                 for channelInd in range(numChannels):
                     ax[channelInd+3].plot(origDataTmp[i,:,channelInd])
                     ax[channelInd+3].set_ylim(ylim[channelInd])
