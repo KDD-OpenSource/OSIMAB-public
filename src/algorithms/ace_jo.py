@@ -130,7 +130,8 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         X.interpolate(inplace=True)
         X.bfill(inplace=True)
         data = X.values
-        sequences = [data[i:i + self.sequence_length] for i in range(data.shape[0] - self.sequence_length + 1)]
+        range_ = data.shape[0] - self.sequence_length + 1
+        sequences = [data[i:i + self.sequence_length] for i in range(range_)]
         data_loader = DataLoader(dataset=sequences, batch_size=self.batch_size, shuffle=False, drop_last=False)
 
         self.aed.eval()
@@ -157,7 +158,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
 
             error_rhs = nn.L1Loss(reduce=False)(output[1], output[2].view((ts.size()[0], -1)).data)
             score_rhs = -mvnormal_rhs.logpdf(error_rhs.view(-1, output[2].shape[1]).data.cpu().numpy())
-            scores_rhs.append(score_rhs.reshape(ts.size(0), -1))
+            scores_rhs.append(score_rhs.reshape(ts.size(0), -1).mean(axis=1))
 
             if self.details:
                 outputs.append(output[0].data.numpy())
@@ -181,6 +182,13 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             lattice_rhs[lattice_start, i:i + self.sequence_length] = score_rhs
         scores_lhs = np.nanmean(lattice_lhs, axis=0)
         scores_rhs = np.nanmean(lattice_rhs, axis=0)
+
+        # stores seq_len-many scores per timestamp and averages them
+        scores_rhs = np.concatenate(scores_rhs)
+        lattice = np.full((self.sequence_length, X.shape[0]), np.nan)
+        for i, score in enumerate(scores_rhs):
+            lattice[i % self.sequence_length, i:i + self.sequence_length] = score
+        scores_rhs = np.nanmean(lattice, axis=0)
 
         if self.details:
             outputs = np.concatenate(outputs)

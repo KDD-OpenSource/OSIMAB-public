@@ -337,15 +337,24 @@ class Evaluator:
 
         for key, values in det.prediction_details.items():
             axes[i].set_title(key)
+            # print(np.shape(values))
+            max_val = np.max(np.max(values))
+            min_val = np.min(np.min(values))
+
+            # print(max_val)
+            # print(min_val)
             if values.ndim == 1:
                 axes[i].plot(values, color=c)
+                axes[i].set_ylim(min_val, max_val)
                 i += 1
             elif values.ndim == 2:
                 for v in values:
                     axes[i].plot(v, color=c)
+                    axes[i].set_ylim(min_val, max_val)
                     i += 1
             else:
                 self.logger.warning('plot_details: not sure what to do')
+            
             c = cmap(i / grid)
 
         num_tsnePlots = len(det.encoding_details)
