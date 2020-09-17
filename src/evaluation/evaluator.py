@@ -6,6 +6,7 @@ import re
 import sys
 import traceback
 from textwrap import wrap
+from shutil import copyfile
 
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as path_effects
@@ -25,7 +26,7 @@ from .config import init_logging
 
 class Evaluator:
     def __init__(self, datasets: list, detectors: callable, output_dir: {str}=None, seed: int=None,
-                 create_log_file=True):
+                 create_log_file=True, config_file=None):
         """
         :param datasets: list of datasets
         :param detectors: callable that returns list of detectors
@@ -39,6 +40,8 @@ class Evaluator:
         self.results = dict()
         if create_log_file:
             init_logging(os.path.join(self.output_dir, 'logs'))
+        if config_file is not None:
+            copyfile(config_file, os.path.join(self.output_dir, 'config.yaml'))
         self.logger = logging.getLogger(__name__)
         # Dirty hack: Is set by the main.py to insert results from multiple evaluator runs
         self.benchmark_results = None
