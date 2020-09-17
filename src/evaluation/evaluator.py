@@ -34,6 +34,8 @@ class Evaluator:
         self.datasets = datasets
         self._detectors = detectors
         self.output_dir = output_dir or 'reports'
+        timestamp = time.strftime('%Y-%m-%d-%H%M%S')
+        self.output_dir = os.path.join(self.output_dir, timestamp)
         self.results = dict()
         if create_log_file:
             init_logging(os.path.join(self.output_dir, 'logs'))
