@@ -154,6 +154,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         X.bfill(inplace=True)
         data = X.values
         range_ = data.shape[0] - self.sequence_length + 1
+        # print(range_)
         sequences = [data[i:i + self.sequence_length] for i in range(range_)]
         data_loader = DataLoader(dataset=sequences, batch_size=self.batch_size, shuffle=False, drop_last=False)
 
