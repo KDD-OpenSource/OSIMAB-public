@@ -1,5 +1,5 @@
 
-ctx:                        'Description of the state'
+ctx:                        'Training with Sigmoid Act'
 
 epoch:                      20
 
@@ -7,12 +7,14 @@ ace:
   seq_len:                  10
   hiddenSize1:              5
   hiddenSize2:              2
-  train_per:                0.99
+  train_per:                0.8
   LR:                       0.001
+  sensor_spec_loss:         True
+  corr_loss:                True
 
 testSize:                   200
 
-datatset:
+dataset:
   regexp_bin:               ''
   regexp_sensor:            ''
   impute_anomaly:           True
