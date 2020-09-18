@@ -15,13 +15,14 @@ from .algorithm_utils import Algorithm, PyTorchUtils
 class AutoEncoderJO(Algorithm, PyTorchUtils):
     def __init__(self, name: str='AutoEncoderJO', num_epochs: int=10, batch_size: int=20, lr: float=1e-4,
                  hidden_size1: int=5, hidden_size2: int=2, sequence_length: int=30, train_gaussian_percentage: float=0.25,
-                 seed: int=123, gpu: int=None, details=True, train_max=None, sensor_specific = True):
+                 seed: int=123, gpu: int=None, details=True, train_max=None, sensor_specific = True, corr_loss = False):
         Algorithm.__init__(self, __name__, name, seed, details=details)
         PyTorchUtils.__init__(self, seed, gpu)
         self.num_epochs = num_epochs
         self.batch_size = batch_size
         self.lr = lr
         self.sensor_specific = sensor_specific
+        self.corr_loss = corr_loss
         self.input_size = None
         self.hidden_size1 = hidden_size1
         self.hidden_size2 = hidden_size2
@@ -46,6 +47,21 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         sum_sqr_err = sqr_err.sum(1)
         root_sum_sqr_err = torch.sqrt(sum_sqr_err)
         return root_sum_sqr_err
+
+    def CorrLoss(self, yhat, y):
+        # mse = nn.MSELoss()
+        # batch_size = yhat.size()[0]
+        subclassLength=self.hidden_size1
+        yhat = yhat.view((-1, subclassLength))
+        y = y.view((-1, subclassLength))
+        vhat = yhat - torch.mean(yhat, 0)
+        vy = y - torch.mean(y, 0)
+        cost = torch.sum(vhat*vy, 1)
+        cost1 = torch.rsqrt(torch.sum(vhat ** 2, 1)) 
+        cost2 = torch.rsqrt(torch.sum(vy ** 2, 1))
+        cost = 1.0-torch.abs(torch.mean(cost*cost1*cost2))
+        #print(cost)
+        return cost
 
     def fit(self, X: pd.DataFrame):
         X.interpolate(inplace=True)
@@ -77,19 +93,26 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             latentSpace = []
             logging.debug(f'Epoch {epoch+1}/{self.num_epochs}.')
             for ts_batch in train_loader:
+                self.aed.zero_grad()
                 output = self.aed(self.to_var(ts_batch), return_latent=True)
                 latentSpace.append(output[2])
                 #loss1 = nn.MSELoss(size_average=False)(output[0], self.to_var(ts_batch.float()))
-                loss1 = nn.MSELoss(reduction = 'sum')(output[0], self.to_var(ts_batch.float()))
-                #loss1 = nn.MSELoss(reduction = 'mean')(output[0], self.to_var(ts_batch.float()))
-                if not self.sensor_specific:
+                #loss1 = nn.MSELoss(reduction = 'sum')(output[0], self.to_var(ts_batch.float()))
+                loss1 = nn.MSELoss(reduction = 'mean')(output[0], self.to_var(ts_batch.float()))
+                loss2 = 0
+                if not self.sensor_specific and not self.corr_loss:
                     #loss2 = nn.MSELoss(size_average=False)(output[1], output[2].view((ts_batch.size()[0], -1)).data)
-                    loss2 = nn.MSELoss(reduction = 'sum')(output[1], output[2].view((ts_batch.size()[0], -1)).data)
-                    #loss2 = nn.MSELoss(reduction = 'mean')(output[1], output[2].view((ts_batch.size()[0], -1)).data)
-                else:
-                    loss2 = torch.mean(self.SensorSpecificLoss(output[1],
+                    # loss2 = nn.MSELoss(reduction = 'sum')(output[1], output[2].view((ts_batch.size()[0], -1)).data)
+                    loss2 += nn.MSELoss(reduction = 'mean')(output[1], output[2].view((ts_batch.size()[0], -1)).data)
+                
+                if self.sensor_specific:
+                    loss2 += torch.mean(self.SensorSpecificLoss(output[1],
                         output[2].view((ts_batch.size()[0], -1)).data))
-                self.aed.zero_grad()
+                
+                if self.corr_loss:
+                    loss2 += torch.mean(self.CorrLoss(output[1],
+                        output[2].view((ts_batch.size()[0], -1)).data))
+                
                 (alpha*loss1 + beta*loss2).backward()
                 optimizer.step()
             #alpha/=2
@@ -131,6 +154,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         X.bfill(inplace=True)
         data = X.values
         range_ = data.shape[0] - self.sequence_length + 1
+        # print(range_)
         sequences = [data[i:i + self.sequence_length] for i in range(range_)]
         data_loader = DataLoader(dataset=sequences, batch_size=self.batch_size, shuffle=False, drop_last=False)
 
@@ -157,8 +181,8 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             scores_lhs.append(score.reshape(ts.size(0), self.sequence_length))
 
             error_rhs = nn.L1Loss(reduce=False)(output[1], output[2].view((ts.size()[0], -1)).data)
-            score_rhs = -mvnormal_rhs.logpdf(error_rhs.view(-1, output[2].shape[1]).data.cpu().numpy())
-            scores_rhs.append(score_rhs.reshape(ts.size(0), -1).mean(axis=1))
+            score_rhs = -mvnormal_rhs.logpdf(error_rhs.view(-1, output[2].shape[1]).data.cpu().numpy()).reshape(ts.size(0), -1).mean(axis=1)
+            scores_rhs.append(score_rhs.reshape(ts.size(0), -1))
 
             if self.details:
                 outputs.append(output[0].data.numpy())
@@ -184,7 +208,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         scores_rhs = np.nanmean(lattice_rhs, axis=0)
 
         # stores seq_len-many scores per timestamp and averages them
-        scores_rhs = np.concatenate(scores_rhs)
+        # scores_rhs = np.concatenate(scores_rhs)
         lattice = np.full((self.sequence_length, X.shape[0]), np.nan)
         for i, score in enumerate(scores_rhs):
             lattice[i % self.sequence_length, i:i + self.sequence_length] = score
@@ -227,7 +251,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 self.encoding_details.update({f'channel_{channel}':
                     encodings[:,channel]})
 
-            num_plots = 500
+            num_plots = 19
             encodings = encodings.reshape((encodings.shape[0],-1))
             outputs_rhs = outputs_rhs.reshape((encodings.shape[0],-1))
             origDataTmp = np.array(sequences[:10*num_plots:10])
