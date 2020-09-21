@@ -357,9 +357,9 @@ class Evaluator:
             
             c = cmap(i / grid)
 
-        num_tsnePlots = len(det.encoding_details)
-        fig_enc, ax = plt.subplots(num_tsnePlots,1,
-                figsize=(15,1.5*num_tsnePlots))
+        #num_tsnePlots = len(det.encoding_details)
+        #fig_enc, ax = plt.subplots(num_tsnePlots,1,
+        #        figsize=(15,1.5*num_tsnePlots))
         #i = 0
         #for key, values in det.encoding_details.items():
         #    enc_tsne = TSNE(n_components=2).fit_transform(values[:1000])

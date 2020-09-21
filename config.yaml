@@ -1,16 +1,16 @@
 
 ctx:                        'Description of the state'
 
-epoch:                      1
+epoch:                      10
 
 ace:
   seq_len:                  100
   hiddenSize1:              5
   hiddenSize2:              5
-  train_per:                0.99
+  train_per:                0.8
   LR:                       0.001
 
-testSize:                   200
+testSize:                   60000
 
 dataset:
   regexp_bin:               ''

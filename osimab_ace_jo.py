@@ -43,13 +43,13 @@ def evaluate_osimab_jo():
             #OSIMABDataset(cfg, file_name='OSIMAB_04_01_19_F6_SG_1_NU.csv')
             #OSIMABDataset(cfg, file_name='OSIMAB_04_01_19_F6_WA_SO.csv')
             #OSIMABDataset(cfg, file_name='OSIMABData_04_01_19_F6_SG.csv')
-            #OSIMABDataset(cfg, file_name='OSIMAB_full_NT_INC.csv')
+            OSIMABDataset(cfg, file_name='OSIMAB_full_NT_INC.csv')
             #OSIMABDataset(cfg, file_name='OSIMAB_full_NT_INC_1.csv')
             #OSIMABDataset(cfg, file_name='OSIMAB_full_NT_WA.csv'),
             #OSIMABDataset(cfg, file_name='OSIMAB_full_NT_ACC.csv'),
             #OSIMABDataset(cfg, file_name='OSIMAB_full_NT_SG4.csv'),
             #OSIMABDataset(cfg, file_name='OSIMAB_full_NT_SG8.csv')
-            OSIMABDataset(cfg, file_name='OSIMAB_mid_NT_INC.csv')
+            #OSIMABDataset(cfg, file_name='OSIMAB_mid_NT_INC.csv')
             #OSIMABDataset(cfg, file_name='OSIMAB_mid_NT_INC_1.csv')
             #OSIMABDataset(cfg, file_name='OSIMAB_mid_NT_WA.csv'),
             #OSIMABDataset(cfg, file_name='OSIMAB_mid_NT_ACC.csv'),

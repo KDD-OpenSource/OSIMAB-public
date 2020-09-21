@@ -43,7 +43,6 @@ class OSIMABDataset(RealDataset):
 
     def get_data_osimab_with_anomaly(self, test_len):
         df = pd.read_csv(self.processed_path)
-        #import pdb; pdb.set_trace()
 
         n_train = int(df.shape[0] * self.cfg.ace.train_per)
         #train = df.iloc[:n_train, 2:7]

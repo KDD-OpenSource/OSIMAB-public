@@ -185,11 +185,9 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 errors_rhs.append(error_rhs.data.numpy())
 
         # stores seq_len-many scores per timestamp and averages them
-        import pdb; pdb.set_trace()
+        #import pdb; pdb.set_trace()
         scores_lhs = np.concatenate(scores_lhs)
         scores_rhs = np.concatenate(scores_rhs)
-        #scores_rhs = scores_rhs.mean(axis=1)
-        #scores_rhs = scores_rhs.reshape(-1, 1)
         lattice_lhs = np.full((self.sequence_length, X.shape[0]), np.nan)
         lattice_rhs = np.full((self.sequence_length, X.shape[0]), np.nan)
         for i, score in enumerate(zip(scores_lhs, scores_rhs)):
@@ -199,14 +197,6 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             lattice_rhs[lattice_start, i:i + self.sequence_length] = score_rhs
         scores_lhs = np.nanmean(lattice_lhs, axis=0)
         scores_rhs = np.nanmean(lattice_rhs, axis=0)
-
-        # stores seq_len-many scores per timestamp and averages them
-        #scores_rhs = np.concatenate(scores_rhs)
-        #lattice = np.full((self.sequence_length, X.shape[0]), np.nan)
-        #for i, score in enumerate(scores_rhs):
-        #    lattice[i % self.sequence_length, i:i + self.sequence_length] = score
-        #scores_rhs = np.nanmean(lattice, axis=0)
-
 
         if self.details:
             outputs = np.concatenate(outputs)
@@ -226,8 +216,9 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             errors_rhs = np.concatenate(errors_rhs)
             lattice = np.full((self.sequence_length, X.shape[0], X.shape[1]), np.nan)
             for i, error_rhs in enumerate(errors_rhs):
-                error_rhs = error_rhs.reshape(self.hidden_size1,
-                        -1).sum(axis=0)
+                #import pdb; pdb.set_trace()
+                #error_rhs = error_rhs.reshape(self.hidden_size1,
+                        #-1).sum(axis=0)
                 error_rhs = error_rhs.repeat(
                         self.sequence_length).reshape(X.shape[1],
                                 self.sequence_length).transpose()
@@ -235,49 +226,49 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                         :] = error_rhs
             self.prediction_details.update({'errors_mean_rhs': np.nanmean(lattice, axis=0).T})
 
-            import os
-            import matplotlib.pyplot as plt
-            os.chdir('tmp')
-            encodings = np.concatenate(encodings)
-            encodings_rhs = np.concatenate(encodings_rhs)
-            outputs_rhs = np.concatenate(outputs_rhs)
-            for channel in range(self.input_size):
-                self.encoding_details.update({f'channel_{channel}':
-                    encodings[:,channel]})
+            #import os
+            #import matplotlib.pyplot as plt
+            #os.chdir('tmp')
+            #encodings = np.concatenate(encodings)
+            #encodings_rhs = np.concatenate(encodings_rhs)
+            #outputs_rhs = np.concatenate(outputs_rhs)
+            #for channel in range(self.input_size):
+            #    self.encoding_details.update({f'channel_{channel}':
+            #        encodings[:,channel]})
 
-            num_plots = 500
-            encodings = encodings.reshape((encodings.shape[0],-1))
-            outputs_rhs = outputs_rhs.reshape((encodings.shape[0],-1))
-            origDataTmp = np.array(sequences[:10*num_plots:10])
-            numChannels = origDataTmp.shape[2]
-            ylim = []
-            ylimEnc = [1.1*encodings.min(), 1.1*encodings.max()]
-            ylimOutRhs = [1.1*outputs_rhs.min(), 1.1*outputs_rhs.max()]
-            ylimEncRhs = [1.1*encodings_rhs.min(), 1.1*encodings_rhs.max()]
-            ylimLatent = [min(list([*ylimEnc,*ylimOutRhs])),max(list([*ylimEnc,*ylimOutRhs]))]
-            for channelInd in range(numChannels):
-                channelMin = origDataTmp[:,:,channelInd].min()
-                channelMax = origDataTmp[:,:,channelInd].max()
-                ylim.append([1.1*channelMin, 1.1*channelMax])
+            #num_plots = 500
+            #encodings = encodings.reshape((encodings.shape[0],-1))
+            #outputs_rhs = outputs_rhs.reshape((encodings.shape[0],-1))
+            #origDataTmp = np.array(sequences[:10*num_plots:10])
+            #numChannels = origDataTmp.shape[2]
+            #ylim = []
+            #ylimEnc = [1.1*encodings.min(), 1.1*encodings.max()]
+            #ylimOutRhs = [1.1*outputs_rhs.min(), 1.1*outputs_rhs.max()]
+            #ylimEncRhs = [1.1*encodings_rhs.min(), 1.1*encodings_rhs.max()]
+            #ylimLatent = [min(list([*ylimEnc,*ylimOutRhs])),max(list([*ylimEnc,*ylimOutRhs]))]
+            #for channelInd in range(numChannels):
+            #    channelMin = origDataTmp[:,:,channelInd].min()
+            #    channelMax = origDataTmp[:,:,channelInd].max()
+            #    ylim.append([1.1*channelMin, 1.1*channelMax])
 
-            import pdb; pdb.set_trace()
-            for i in range(num_plots):
-                fig, ax = plt.subplots(numChannels+3,1, figsize =(15,10))
-                ax[0].plot(encodings[i*10])
-                ax[0].set_ylim(ylimLatent)
-                ax[1].plot(outputs_rhs[i*10])
-                ax[1].set_ylim(ylimLatent)
-                ax[2].plot(encodings_rhs[i*10])
-                ax[2].set_ylim(ylimEncRhs)
-                for channelInd in range(numChannels):
-                    ax[channelInd+3].plot(origDataTmp[i,:,channelInd])
-                    ax[channelInd+3].set_ylim(ylim[channelInd])
+            #import pdb; pdb.set_trace()
+            #for i in range(num_plots):
+            #    fig, ax = plt.subplots(numChannels+3,1, figsize =(15,10))
+            #    ax[0].plot(encodings[i*10])
+            #    ax[0].set_ylim(ylimLatent)
+            #    ax[1].plot(outputs_rhs[i*10])
+            #    ax[1].set_ylim(ylimLatent)
+            #    ax[2].plot(encodings_rhs[i*10])
+            #    ax[2].set_ylim(ylimEncRhs)
+            #    for channelInd in range(numChannels):
+            #        ax[channelInd+3].plot(origDataTmp[i,:,channelInd])
+            #        ax[channelInd+3].set_ylim(ylim[channelInd])
 
-                fig.savefig(f'enc_{i}')
-                plt.close('all')
-            os.chdir('../')
+            #    fig.savefig(f'enc_{i}')
+            #    plt.close('all')
+            #os.chdir('../')
 
-            self.encoding_details.update({'encodings': encodings})
+            #self.encoding_details.update({'encodings': encodings})
 
         return scores_lhs + scores_rhs
 
