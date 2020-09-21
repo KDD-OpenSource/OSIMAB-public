@@ -232,8 +232,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             errors_rhs = np.concatenate(errors_rhs)
             lattice = np.full((self.sequence_length, X.shape[0], X.shape[1]), np.nan)
             for i, error_rhs in enumerate(errors_rhs):
-                error_rhs = error_rhs.reshape(self.hidden_size1,
-                        -1).sum(axis=0)
+                error_rhs = error_rhs.reshape(-1, self.hidden_size1).transpose().sum(axis=0)
                 error_rhs = error_rhs.repeat(
                         self.sequence_length).reshape(X.shape[1],
                                 self.sequence_length).transpose()
