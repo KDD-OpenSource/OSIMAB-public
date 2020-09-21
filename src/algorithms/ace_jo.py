@@ -120,7 +120,11 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         error_vectors = []
         for ts_batch in train_gaussian_loader:
             output = self.aed(self.to_var(ts_batch), return_latent = True)
-            error = nn.L1Loss(reduce=False)(output[1], output[2].view((ts_batch.size()[0], -1)).data)
+            # old error did not sum over the latent space for each sensor
+            #error = nn.L1Loss(reduce=False)(output[1], output[2].view((ts_batch.size()[0], -1)).data)
+            #new error sums latent space errors for each sensor
+            error = nn.L1Loss(reduce=False)(
+                    output[1].view(output[2].shape), output[2]).sum(axis=2)
             error_vectors += list(error.view(-1, output[2].shape[1]).data.cpu().numpy())
 
         self.mean_rhs = np.mean(error_vectors, axis=0)
@@ -156,9 +160,21 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             score = -mvnormal.logpdf(error.reshape(-1, X.shape[1]).data.cpu().numpy())
             scores_lhs.append(score.reshape(ts.size(0), self.sequence_length))
 
-            error_rhs = nn.L1Loss(reduce=False)(output[1], output[2].view((ts.size()[0], -1)).data)
-            score_rhs = -mvnormal_rhs.logpdf(error_rhs.view(-1, output[2].shape[1]).data.cpu().numpy())
-            scores_rhs.append(score_rhs.reshape(ts.size(0), -1).mean(axis=1))
+            #we spread the error for each sensor over the entire length of 100
+            # timesteps
+            # old error_rhs did not sum over the latent space of each sensor
+            #error_rhs = nn.L1Loss(reduce=False)(output[1], output[2].view((ts.size()[0], -1)).data)
+            # I think we should here rather have
+            error_rhs = nn.L1Loss(reduce=False)(
+                output[1].view(output[2].shape), output[2]).sum(axis=2)
+            score_rhs = -mvnormal_rhs.logpdf(error_rhs.view(-1,
+                output[2].shape[1]).data.cpu().numpy())
+            score_rhs = np.repeat(score_rhs,
+                    self.sequence_length).reshape(ts.size(0),
+                            self.sequence_length)
+            #scores_rhs.append(score_rhs.reshape(ts.size(0), -1).mean(axis=1))
+            scores_rhs.append(score_rhs)
+            
 
             if self.details:
                 outputs.append(output[0].data.numpy())
@@ -169,10 +185,11 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 errors_rhs.append(error_rhs.data.numpy())
 
         # stores seq_len-many scores per timestamp and averages them
+        import pdb; pdb.set_trace()
         scores_lhs = np.concatenate(scores_lhs)
         scores_rhs = np.concatenate(scores_rhs)
-        scores_rhs = scores_rhs.mean(axis=1)
-        scores_rhs = scores_rhs.reshape(-1, 1)
+        #scores_rhs = scores_rhs.mean(axis=1)
+        #scores_rhs = scores_rhs.reshape(-1, 1)
         lattice_lhs = np.full((self.sequence_length, X.shape[0]), np.nan)
         lattice_rhs = np.full((self.sequence_length, X.shape[0]), np.nan)
         for i, score in enumerate(zip(scores_lhs, scores_rhs)):
@@ -184,11 +201,12 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         scores_rhs = np.nanmean(lattice_rhs, axis=0)
 
         # stores seq_len-many scores per timestamp and averages them
-        scores_rhs = np.concatenate(scores_rhs)
-        lattice = np.full((self.sequence_length, X.shape[0]), np.nan)
-        for i, score in enumerate(scores_rhs):
-            lattice[i % self.sequence_length, i:i + self.sequence_length] = score
-        scores_rhs = np.nanmean(lattice, axis=0)
+        #scores_rhs = np.concatenate(scores_rhs)
+        #lattice = np.full((self.sequence_length, X.shape[0]), np.nan)
+        #for i, score in enumerate(scores_rhs):
+        #    lattice[i % self.sequence_length, i:i + self.sequence_length] = score
+        #scores_rhs = np.nanmean(lattice, axis=0)
+
 
         if self.details:
             outputs = np.concatenate(outputs)
@@ -242,6 +260,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 channelMax = origDataTmp[:,:,channelInd].max()
                 ylim.append([1.1*channelMin, 1.1*channelMax])
 
+            import pdb; pdb.set_trace()
             for i in range(num_plots):
                 fig, ax = plt.subplots(numChannels+3,1, figsize =(15,10))
                 ax[0].plot(encodings[i*10])
