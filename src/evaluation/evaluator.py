@@ -36,7 +36,10 @@ class Evaluator:
         self._detectors = detectors
         self.output_dir = output_dir or 'reports'
         timestamp = time.strftime('%Y-%m-%d-%H%M%S')
-        self.output_dir = os.path.join(self.output_dir, timestamp)
+        run_dir = timestamp
+        if cfg is not None and hasattr(cfg, 'ctx'):
+            run_dir += f'_{cfg.ctx}'
+        self.output_dir = os.path.join(self.output_dir, run_dir)
         self.results = dict()
         if create_log_file:
             init_logging(os.path.join(self.output_dir, 'logs'))
