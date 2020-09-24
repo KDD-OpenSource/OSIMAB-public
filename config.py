@@ -16,15 +16,12 @@ class config:
                 for k, v in doc.items():
                     cmd = "self."+k+"=Dummy()"
                     exec(cmd)
-                    # if k == "train":
                     if type(v) is dict:
                         for k1, v1 in v.items():
                             cmd = "self."+k+"." + k1 + "=" + repr(v1)
-                            # print(cmd)
                             exec(cmd)
                     else:
                         cmd = "self."+k+"="+repr(v)
-                        # print(cmd)
                         exec(cmd)
                 self.config_dict = doc
             stream.close()
