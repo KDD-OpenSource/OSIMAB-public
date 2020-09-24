@@ -15,7 +15,7 @@ import random
 
 def detectors(seed):
     # Reading config
-    cfg = config(external_path="/Users/shahnawaz/Documents/DeepADoTS/config.yaml")
+    cfg = config(external_path="config.yaml")
     dets = [AutoEncoderJO(num_epochs=cfg.epoch,
         hidden_size1 = cfg.ace.hiddenSize1,
         hidden_size2 = cfg.ace.hiddenSize2,
