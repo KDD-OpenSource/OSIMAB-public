@@ -11,18 +11,18 @@ class config:
         if external_path:
             stream = open(external_path, "r")
             docs = yaml.safe_load_all(stream)
+            self.config_dict = {}
             for doc in docs:
                 for k, v in doc.items():
                     cmd = "self."+k+"=Dummy()"
                     exec(cmd)
-                    # if k == "train":
                     if type(v) is dict:
                         for k1, v1 in v.items():
                             cmd = "self."+k+"." + k1 + "=" + repr(v1)
-                            print(cmd)
                             exec(cmd)
                     else:
                         cmd = "self."+k+"="+repr(v)
-                        print(cmd)
                         exec(cmd)
+                self.config_dict = doc
             stream.close()
+
