@@ -22,7 +22,8 @@ def detectors(seed):
         lr = cfg.ace.LR,
         sequence_length = cfg.ace.seq_len,
         #batch_size = 2,
-        sensor_specific = False,
+        sensor_specific = cfg.ace.sensor_spec_loss,
+        corr_loss=cfg.ace.corr_loss,
         #train_max = 1000,
         seed=seed)]
 
@@ -49,7 +50,7 @@ def evaluate_osimab_jo():
             #OSIMABDataset(file_name='OSIMAB_full_NT_ACC.csv'),
             #OSIMABDataset(file_name='OSIMAB_full_NT_SG4.csv'),
             #OSIMABDataset(file_name='OSIMAB_full_NT_SG8.csv')
-            OSIMABDataset(file_name='OSIMAB_mid_NT_INC.csv')
+            OSIMABDataset(cfg, file_name='OSIMAB_mid_NT_INC.csv')
             #OSIMABDataset(file_name='OSIMAB_mid_NT_INC_1.csv')
             #OSIMABDataset(file_name='OSIMAB_mid_NT_WA.csv'),
             #OSIMABDataset(file_name='OSIMAB_mid_NT_ACC.csv'),
