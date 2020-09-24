@@ -28,4 +28,4 @@ class config:
                         exec(cmd)
                 self.config_dict = doc
             stream.close()
-            
+
