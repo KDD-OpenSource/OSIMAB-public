@@ -50,7 +50,10 @@ class OSIMABDataset(RealDataset):
         scaler = StandardScaler()
         train = pd.DataFrame(scaler.fit_transform(train), columns=train.columns)
         #test = df.iloc[n_train:, 2:7]
-        rand_idx = random.randint(n_train, df.shape[0]-1-test_len)
+        # take a random index
+        #rand_idx = random.randint(n_train, df.shape[0]-1-test_len)
+        # take the last indices
+        rand_idx = df.shape[0]-1-test_len
         test = df.iloc[rand_idx:rand_idx+test_len]
 
         train_label = pd.Series(np.zeros(train.shape[0]))
@@ -59,7 +62,7 @@ class OSIMABDataset(RealDataset):
         dur = int(test.shape[0]/10)
         num_channels = df.shape[1]
         idxs = test.shape[0] - dur
-        idxs = np.random.choice(idxs, num_channels)
+        idxs = np.random.choice(idxs, 4*num_channels)
 
         for idx in idxs:
             channel = np.random.choice(num_channels,1)[0]

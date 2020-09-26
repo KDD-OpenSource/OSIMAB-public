@@ -320,8 +320,11 @@ class Evaluator:
         i = 0
         c = cmap(i / grid)
         axes[i].set_title('test data')
+
+        testDataYLim = (np.min(X_test.values), np.max(X_test.values))
         for col in X_test.values.T:
             axes[i].plot(col, color=c)
+            axes[i].set_ylim(testDataYLim)
             i += 1
         c = cmap(i / grid)
 
