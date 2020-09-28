@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import random
 from .real_datasets import RealDataset
 
@@ -28,10 +28,14 @@ class OSIMABDataset(RealDataset):
         n_train = int(df.shape[0] * self.cfg.ace.train_per)
         train = df.iloc[:n_train]
 
-        rand_idx = random.randint(n_train, df.shape[0]-1-test_len)
+        # take a random index
+        # rand_idx = random.randint(n_train, df.shape[0]-1-test_len)
+        # take the last indices
+        rand_idx = df.shape[0]-1-test_len
         test = df.iloc[rand_idx:rand_idx+test_len]
 
         scaler = StandardScaler()
+        #scaler = MinMaxScaler()
         scaler.fit(train)
         train = standardize(train, scaler)
         test = standardize(test, scaler)
@@ -48,6 +52,7 @@ class OSIMABDataset(RealDataset):
         #train = df.iloc[:n_train, 2:7]
         train = df.iloc[:n_train]
         scaler = StandardScaler()
+        #scaler = MinMaxScaler()
         train = pd.DataFrame(scaler.fit_transform(train), columns=train.columns)
         #test = df.iloc[n_train:, 2:7]
         # take a random index
@@ -62,7 +67,7 @@ class OSIMABDataset(RealDataset):
         dur = int(test.shape[0]/10)
         num_channels = df.shape[1]
         idxs = test.shape[0] - dur
-        idxs = np.random.choice(idxs, 4*num_channels)
+        idxs = np.random.choice(idxs, 1*num_channels)
 
         for idx in idxs:
             channel = np.random.choice(num_channels,1)[0]

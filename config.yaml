@@ -1,7 +1,7 @@
 
 ctx:                        'Description of the state'
 
-epoch:                      20
+epoch:                      10
 
 ace:
   seq_len:                  100
