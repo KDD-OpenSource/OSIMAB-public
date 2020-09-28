@@ -15,13 +15,14 @@ from .algorithm_utils import Algorithm, PyTorchUtils
 class AutoEncoderJO(Algorithm, PyTorchUtils):
     def __init__(self, name: str='AutoEncoderJO', num_epochs: int=10, batch_size: int=20, lr: float=1e-4,
                  hidden_size1: int=5, hidden_size2: int=2, sequence_length: int=30, train_gaussian_percentage: float=0.25,
-                 seed: int=123, gpu: int=None, details=True, train_max=None, sensor_specific = True):
+                 seed: int=123, gpu: int=None, details=True, train_max=None, sensor_specific = True, corr_loss = False):
         Algorithm.__init__(self, __name__, name, seed, details=details)
         PyTorchUtils.__init__(self, seed, gpu)
         self.num_epochs = num_epochs
         self.batch_size = batch_size
         self.lr = lr
         self.sensor_specific = sensor_specific
+        self.compute_corr_loss = corr_loss
         self.input_size = None
         self.hidden_size1 = hidden_size1
         self.hidden_size2 = hidden_size2
@@ -35,7 +36,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         self.mean, self.cov = None, None
         self.mean_rhs, self.cov_rhs = None, None
 
-    def SensorSpecificLoss(self, yhat, y):
+    def sensor_specific_loss(self, yhat, y):
         # mse = nn.MSELoss()
         # batch_size = yhat.size()[0]
         subclassLength=self.hidden_size1
@@ -46,6 +47,21 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         sum_sqr_err = sqr_err.sum(1)
         root_sum_sqr_err = torch.sqrt(sum_sqr_err)
         return root_sum_sqr_err
+
+    def corr_loss(self, yhat, y):
+        # mse = nn.MSELoss()
+        # batch_size = yhat.size()[0]
+        subclassLength=self.hidden_size1
+        yhat = yhat.view((-1, subclassLength))
+        y = y.view((-1, subclassLength))
+        vhat = yhat - torch.mean(yhat, 0)
+        vy = y - torch.mean(y, 0)
+        cost = torch.sum(vhat*vy, 1)
+        cost1 = torch.rsqrt(torch.sum(vhat ** 2, 1))
+        cost2 = torch.rsqrt(torch.sum(vy ** 2, 1))
+        cost = 1.0-torch.abs(torch.mean(cost*cost1*cost2))
+        #print(cost)
+        return cost
 
     def fit(self, X: pd.DataFrame):
         X.interpolate(inplace=True)
@@ -77,19 +93,26 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             latentSpace = []
             logging.debug(f'Epoch {epoch+1}/{self.num_epochs}.')
             for ts_batch in train_loader:
+                self.aed.zero_grad()
                 output = self.aed(self.to_var(ts_batch), return_latent=True)
                 latentSpace.append(output[2])
                 #loss1 = nn.MSELoss(size_average=False)(output[0], self.to_var(ts_batch.float()))
-                loss1 = nn.MSELoss(reduction = 'sum')(output[0], self.to_var(ts_batch.float()))
-                #loss1 = nn.MSELoss(reduction = 'mean')(output[0], self.to_var(ts_batch.float()))
-                if not self.sensor_specific:
+                #loss1 = nn.MSELoss(reduction = 'sum')(output[0], self.to_var(ts_batch.float()))
+                loss1 = nn.MSELoss(reduction = 'mean')(output[0], self.to_var(ts_batch.float()))
+                loss2 = 0
+                if not self.sensor_specific and not self.compute_corr_loss:
                     #loss2 = nn.MSELoss(size_average=False)(output[1], output[2].view((ts_batch.size()[0], -1)).data)
-                    loss2 = nn.MSELoss(reduction = 'sum')(output[1], output[2].view((ts_batch.size()[0], -1)).data)
-                    #loss2 = nn.MSELoss(reduction = 'mean')(output[1], output[2].view((ts_batch.size()[0], -1)).data)
-                else:
-                    loss2 = torch.mean(self.SensorSpecificLoss(output[1],
+                    # loss2 = nn.MSELoss(reduction = 'sum')(output[1], output[2].view((ts_batch.size()[0], -1)).data)
+                    loss2 += nn.MSELoss(reduction = 'mean')(output[1], output[2].view((ts_batch.size()[0], -1)).data)
+
+                if self.sensor_specific:
+                    loss2 += torch.mean(self.sensor_specific_loss(output[1],
                         output[2].view((ts_batch.size()[0], -1)).data))
-                self.aed.zero_grad()
+
+                if self.compute_corr_loss:
+                    loss2 += torch.mean(self.corr_loss(output[1],
+                        output[2].view((ts_batch.size()[0], -1)).data))
+
                 (alpha*loss1 + beta*loss2).backward()
                 optimizer.step()
             #alpha/=2
@@ -228,8 +251,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 self.encoding_details.update({f'channel_{channel}':
                     encodings[:,channel]})
 
-            #numPlots = int(len(sequences)/10)
-            numPlots = 500
+            num_plots = 19
             encodings = encodings.reshape((encodings.shape[0],-1))
             outputs_rhs = outputs_rhs.reshape((encodings.shape[0],-1))
             origDataTmp = np.array(sequences[:10*numPlots:10])

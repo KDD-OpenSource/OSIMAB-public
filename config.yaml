@@ -1,5 +1,5 @@
 
-ctx:                        'Description of the state'
+ctx:                        'Training with Sigmoid Act'
 
 epoch:                      20
 
@@ -9,6 +9,8 @@ ace:
   hiddenSize2:              5
   train_per:                0.7
   LR:                       0.001
+  sensor_spec_loss:         True
+  corr_loss:                True
 
 testSize:                   30000
 

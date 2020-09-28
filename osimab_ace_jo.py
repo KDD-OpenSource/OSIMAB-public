@@ -22,7 +22,9 @@ def detectors(seed):
         lr = cfg.ace.LR,
         sequence_length = cfg.ace.seq_len,
         #batch_size = 2,
-        sensor_specific = False,
+        sensor_specific = cfg.ace.sensor_spec_loss,
+        corr_loss=cfg.ace.corr_loss,
+        #train_max = 1000,
         seed=seed)]
 
     return sorted(dets, key=lambda x: x.framework)
@@ -37,29 +39,29 @@ def evaluate_osimab_jo():
     seed = 4
     cfg = config(external_path="config.yaml")
     datasets = [
-            #OSIMABDataset(cfg, file_name='OSIMAB_04_01_19_F6_ACC_S1.csv')
-            #OSIMABDataset(cfg, file_name='OSIMAB_04_01_19_F6_INC_1.csv')
-            #OSIMABDataset(cfg, file_name='OSIMAB_04_01_19_F6_SG_1_NU.csv')
-            #OSIMABDataset(cfg, file_name='OSIMAB_04_01_19_F6_WA_SO.csv')
-            #OSIMABDataset(cfg, file_name='OSIMABData_04_01_19_F6_SG.csv')
-            #OSIMABDataset(cfg, file_name='OSIMAB_full_NT_INC.csv')
-            #OSIMABDataset(cfg, file_name='OSIMAB_full_NT_INC_1.csv')
-            #OSIMABDataset(cfg, file_name='OSIMAB_full_NT_WA.csv'),
-            #OSIMABDataset(cfg, file_name='OSIMAB_full_NT_ACC.csv'),
-            #OSIMABDataset(cfg, file_name='OSIMAB_full_NT_SG4.csv'),
-            #OSIMABDataset(cfg, file_name='OSIMAB_full_NT_SG8.csv')
+            #OSIMABDataset(file_name='OSIMAB_04_01_19_F6_ACC_S1.csv')
+            #OSIMABDataset(file_name='OSIMAB_04_01_19_F6_INC_1.csv')
+            #OSIMABDataset(file_name='OSIMAB_04_01_19_F6_SG_1_NU.csv')
+            #OSIMABDataset(file_name='OSIMAB_04_01_19_F6_WA_SO.csv')
+            #OSIMABDataset(file_name='OSIMABData_04_01_19_F6_SG.csv')
+            #OSIMABDataset(file_name='OSIMAB_full_NT_INC.csv')
+            #OSIMABDataset(file_name='OSIMAB_full_NT_INC_1.csv')
+            #OSIMABDataset(file_name='OSIMAB_full_NT_WA.csv'),
+            #OSIMABDataset(file_name='OSIMAB_full_NT_ACC.csv'),
+            #OSIMABDataset(file_name='OSIMAB_full_NT_SG4.csv'),
+            #OSIMABDataset(file_name='OSIMAB_full_NT_SG8.csv')
             OSIMABDataset(cfg, file_name='OSIMAB_mid_NT_INC.csv')
-            #OSIMABDataset(cfg, file_name='OSIMAB_mid_NT_INC_1.csv')
-            #OSIMABDataset(cfg, file_name='OSIMAB_mid_NT_WA.csv'),
-            #OSIMABDataset(cfg, file_name='OSIMAB_mid_NT_ACC.csv'),
-            #OSIMABDataset(cfg, file_name='OSIMAB_mid_NT_SG4.csv'),
-            #OSIMABDataset(cfg, file_name='OSIMAB_mid_NT_SG8.csv')
-            #OSIMABDataset(cfg, file_name='OSIMAB_small_NT_INC.csv')
-            #OSIMABDataset(cfg, file_name='OSIMAB_small_NT_INC_1.csv')
-            #OSIMABDataset(cfg, file_name='OSIMAB_small_NT_WA.csv'),
-            #OSIMABDataset(cfg, file_name='OSIMAB_small_NT_ACC.csv'),
-            #OSIMABDataset(cfg, file_name='OSIMAB_small_NT_SG4.csv'),
-            #OSIMABDataset(cfg, file_name='OSIMAB_small_NT_SG8.csv')
+            #OSIMABDataset(file_name='OSIMAB_mid_NT_INC_1.csv')
+            #OSIMABDataset(file_name='OSIMAB_mid_NT_WA.csv'),
+            #OSIMABDataset(file_name='OSIMAB_mid_NT_ACC.csv'),
+            #OSIMABDataset(file_name='OSIMAB_mid_NT_SG4.csv'),
+            #OSIMABDataset(file_name='OSIMAB_mid_NT_SG8.csv')
+            #OSIMABDataset(file_name='OSIMAB_small_NT_INC.csv')
+            #OSIMABDataset(file_name='OSIMAB_small_NT_INC_1.csv')
+            #OSIMABDataset(file_name='OSIMAB_small_NT_WA.csv'),
+            #OSIMABDataset(file_name='OSIMAB_small_NT_ACC.csv'),
+            #OSIMABDataset(file_name='OSIMAB_small_NT_SG4.csv'),
+            #OSIMABDataset(file_name='OSIMAB_small_NT_SG8.csv')
             ]
     evaluator = Evaluator(datasets, detectors, seed=seed)
     evaluator.evaluate()
