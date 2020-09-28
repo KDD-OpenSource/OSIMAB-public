@@ -12,7 +12,6 @@ import random
 
 import random
 
-
 def detectors(seed):
     # Reading config
     cfg = config(external_path="config.yaml")
@@ -21,6 +20,7 @@ def detectors(seed):
         hidden_size2 = cfg.ace.hiddenSize2,
         lr = cfg.ace.LR,
         sequence_length = cfg.ace.seq_len,
+        latentVideo = False,
         #batch_size = 2,
         sensor_specific = cfg.ace.sensor_spec_loss,
         corr_loss=cfg.ace.corr_loss,

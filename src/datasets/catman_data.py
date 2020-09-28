@@ -80,13 +80,15 @@ def standardize_df(df, scaler):
 def main():
     #files = glob.glob('./OSIMABData_03_12/*')
     #files = glob.glob('/osimab/data/itc-prod2.com/*03_12*.zip')
-    files = glob.glob('/osimab/data/itc-prod2.com/*04_01_19*.zip')
+    #files = glob.glob('/osimab/data/itc-prod2.com/*04_01_19*.zip')
+    files = glob.glob('../../data/raw/*2020_04*.bin')
+    import pdb; pdb.set_trace()
     sensorData = catman_to_df(files)
     sensorDataFiltered = []
-    regexs = ['N_F3_INC_1']
+    regexs = ['N_F2_INC']
     #numrows = 10000
-    #numrows = 100000
-    numrows = 360000
+    numrows = 100000
+    #numrows = 360000
     #temperature = True
     temperature = False
     if temperature:
@@ -103,7 +105,7 @@ def main():
         #sensorDataFiltered[index].to_csv('OSIMABData_03_12_'+str(index)+'.csv', index = False)
         #sensorDataFiltered[index].to_csv('OSIMABData_04_01_19_F6_SG.csv', index = False)
         #sensorDataFiltered[index].to_csv('OSIMAB_04_01_19_F6_WA_SO.csv', index = False)
-        sensorDataFiltered[index].to_csv('OSIMAB_full_NT_INC_1.csv', index = False)
+        sensorDataFiltered[index].to_csv('OSIMAB_mid_NT_INC_F2.csv', index = False)
 
 
 if __name__ == '__main__':

@@ -4,10 +4,13 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
+import matplotlib.pyplot as plt
+import os
 from scipy.stats import multivariate_normal
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 from tqdm import trange
+from matplotlib.animation import FuncAnimation
 
 from .algorithm_utils import Algorithm, PyTorchUtils
 
@@ -15,7 +18,7 @@ from .algorithm_utils import Algorithm, PyTorchUtils
 class AutoEncoderJO(Algorithm, PyTorchUtils):
     def __init__(self, name: str='AutoEncoderJO', num_epochs: int=10, batch_size: int=20, lr: float=1e-4,
                  hidden_size1: int=5, hidden_size2: int=2, sequence_length: int=30, train_gaussian_percentage: float=0.25,
-                 seed: int=123, gpu: int=None, details=True, train_max=None, sensor_specific = True, corr_loss = False):
+                 seed: int=123, gpu: int=None, details=True, latentVideo=True,train_max=None, sensor_specific = True):
         Algorithm.__init__(self, __name__, name, seed, details=details)
         PyTorchUtils.__init__(self, seed, gpu)
         self.num_epochs = num_epochs
@@ -29,6 +32,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         self.sequence_length = sequence_length
         self.train_gaussian_percentage = train_gaussian_percentage
         self.train_max = train_max
+        self.latentVideo = latentVideo
 
         self.encoding_details = {}
 
@@ -239,147 +243,18 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 lattice[i % self.sequence_length, i:i + self.sequence_length,
                         :] = error_rhs
             self.prediction_details.update({'errors_mean_rhs': np.nanmean(lattice, axis=0).T})
+            self.encoding_details.update({'encodings': encodings})
+
+            # add scores to prediction results
+            self.prediction_details.update({'scores_lhs': scores_lhs})
+            self.prediction_details.update({'scores_rhs': scores_rhs})
 
             # animation
-            import matplotlib.pyplot as plt
-            import os
-            from matplotlib.animation import FuncAnimation
-            encodings = np.concatenate(encodings)
-            encodings_rhs = np.concatenate(encodings_rhs)
-            outputs_rhs = np.concatenate(outputs_rhs)
-            for channel in range(self.input_size):
-                self.encoding_details.update({f'channel_{channel}':
-                    encodings[:,channel]})
-
-            num_plots = 19
-            encodings = encodings.reshape((encodings.shape[0],-1))
-            outputs_rhs = outputs_rhs.reshape((encodings.shape[0],-1))
-            origDataTmp = np.array(sequences[:10*numPlots:10])
-            numChannels = origDataTmp.shape[2]
-
-            ylim = []
-            ylimEnc = [encodings.min() - 0.1*abs(encodings.min()),
-                    encodings.max() + 0.1*abs(encodings.max())]
-            ylimOutRhs = [outputs_rhs.min() - 0.1*abs(outputs_rhs.min()),
-                    outputs_rhs.max() + 0.1*abs(outputs_rhs.max())]
-            ylimEncRhs = [encodings_rhs.min() - 0.1*abs(encodings_rhs.min()),
-                    encodings_rhs.max() + 0.1*abs(encodings_rhs.max())]
-            ylimLatent = [min(list([*ylimEnc,*ylimOutRhs])),max(list([*ylimEnc,*ylimOutRhs]))]
-            for channelInd in range(numChannels):
-                channelMin = origDataTmp[:,:,channelInd].min()
-                channelMax = origDataTmp[:,:,channelInd].max()
-                ylim.append([channelMin - 0.1*abs(channelMin), channelMax +
-                    0.1*abs(channelMax)])
-
-            #for i in range(numPlots):
-            #    fig, ax = plt.subplots(numChannels+3,1, figsize =(15,10))
-            #    ax[0].plot(encodings[i*10])
-            #    ax[0].set_ylim(ylimLatent)
-            #    ax[1].plot(outputs_rhs[i*10])
-            #    ax[1].set_ylim(ylimLatent)
-            #    ax[2].plot(encodings_rhs[i*10])
-            #    ax[2].set_ylim(ylimEncRhs)
-            #    for channelInd in range(numChannels):
-            #        ax[channelInd+3].plot(origDataTmp[i,:,channelInd])
-            #        ax[channelInd+3].set_ylim(ylim[channelInd])
+            if self.latentVideo:
+                self.createLatentVideo(encodings, encodings_rhs, outputs_rhs,
+                        sequences)
 
 
-
-            fig, ax = plt.subplots(numChannels+3,1, figsize = (15,10))
-            lns = []
-            for i in range(numChannels+3):
-                lns.append(ax[i].plot([],[]))
-            lns.append(ax[0].plot([],[]))
-
-            def init():
-                ax[0].set_ylim(ylimLatent)
-                ax[0].set_xlim(0,encodings.shape[1]+1)
-                ax[1].set_ylim(ylimLatent)
-                ax[1].set_xlim(0,encodings.shape[1]+1)
-                ax[2].set_ylim(ylimEncRhs)
-                ax[2].set_xlim(0,encodings_rhs.shape[1]+1)
-                for channelInd in range(numChannels):
-                    ax[channelInd+3].set_ylim(ylim[channelInd])
-                    ax[channelInd+3].set_xlim(0,
-                            origDataTmp[0,:,channelInd].shape[0]-1)
-                #return ln1, ln2
-                #return lns
-
-            def update(frame):
-                print(frame)
-                xdata = np.linspace(1,encodings.shape[1],encodings.shape[1])
-                lns[0][0].set_data(xdata, encodings[int(frame)*10])
-                xdata = np.linspace(1,outputs_rhs.shape[1],outputs_rhs.shape[1])
-                lns[-1][0].set_data(xdata, outputs_rhs[int(frame)*10])
-                xdata = np.linspace(1,outputs_rhs.shape[1],outputs_rhs.shape[1])
-                lns[1][0].set_data(xdata, outputs_rhs[int(frame)*10])
-                xdata = np.linspace(1,encodings_rhs.shape[1],encodings_rhs.shape[1])
-                lns[2][0].set_data(xdata, encodings_rhs[int(frame)*10])
-                for channelInd in range(numChannels):
-                    length = origDataTmp[int(frame),:,channelInd].shape[0]
-                    xdata = range(length)
-                    lns[channelInd+3][0].set_data(xdata,
-                            origDataTmp[int(frame),:,channelInd])
-                #xdata = np.linspace(0,4,5)
-                ##ydata = encodings[int(frame)][0]
-                #ydata = np.random.uniform(low = 0, high = 1, size=(5))
-                ##ax[0].plot(xdata,ydata)
-                #ln1.set_data(xdata,ydata)
-                #ydata = np.random.uniform(low = 0, high = 1, size=(5))
-                #ln2.set_data(xdata,ydata)
-                #lns[2][0].set_data(xdata,ydata)
-                #ln.set_data(xdata, ydata)
-                #return ln1, ln2
-                #return lns
-
-            ani = FuncAnimation(fig, update, frames = range(numPlots),
-                    init_func = init)
-            os.chdir('tmp')
-            ani.save('test.mp4')
-            os.chdir('../')
-
-
-
-            #os.chdir('tmp')
-            #encodings = np.concatenate(encodings)
-            #encodings_rhs = np.concatenate(encodings_rhs)
-            #outputs_rhs = np.concatenate(outputs_rhs)
-            #for channel in range(self.input_size):
-            #    self.encoding_details.update({f'channel_{channel}':
-            #        encodings[:,channel]})
-
-            #numPlots = 5000
-            #encodings = encodings.reshape((encodings.shape[0],-1))
-            #outputs_rhs = outputs_rhs.reshape((encodings.shape[0],-1))
-            #origDataTmp = np.array(sequences[:10*numPlots:10])
-            #numChannels = origDataTmp.shape[2]
-            #ylim = []
-            #ylimEnc = [1.1*encodings.min(), 1.1*encodings.max()]
-            #ylimOutRhs = [1.1*outputs_rhs.min(), 1.1*outputs_rhs.max()]
-            #ylimEncRhs = [1.1*encodings_rhs.min(), 1.1*encodings_rhs.max()]
-            #ylimLatent = [min(list([*ylimEnc,*ylimOutRhs])),max(list([*ylimEnc,*ylimOutRhs]))]
-            #for channelInd in range(numChannels):
-            #    channelMin = origDataTmp[:,:,channelInd].min()
-            #    channelMax = origDataTmp[:,:,channelInd].max()
-            #    ylim.append([1.1*channelMin, 1.1*channelMax])
-
-            #for i in range(numPlots):
-            #    fig, ax = plt.subplots(numChannels+3,1, figsize =(15,10))
-            #    ax[0].plot(encodings[i*10])
-            #    ax[0].set_ylim(ylimLatent)
-            #    ax[1].plot(outputs_rhs[i*10])
-            #    ax[1].set_ylim(ylimLatent)
-            #    ax[2].plot(encodings_rhs[i*10])
-            #    ax[2].set_ylim(ylimEncRhs)
-            #    for channelInd in range(numChannels):
-            #        ax[channelInd+3].plot(origDataTmp[i,:,channelInd])
-            #        ax[channelInd+3].set_ylim(ylim[channelInd])
-
-            #    fig.savefig(f'enc_{i}')
-            #    plt.close('all')
-            #os.chdir('../')
-
-            self.encoding_details.update({'encodings': encodings})
 
         return scores_lhs + scores_rhs
 
@@ -406,6 +281,76 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                                      gpu=self.gpu)
         self.aed.load_state_dict(model_state_dict)
 
+    def createLatentVideo(self, encodings, encodings_rhs, outputs_rhs,
+            sequences):
+        # save in folder 'latentVideos' with timestamp?
+        encodings = np.concatenate(encodings)
+        encodings_rhs = np.concatenate(encodings_rhs)
+        outputs_rhs = np.concatenate(outputs_rhs)
+        for channel in range(self.input_size):
+            self.encoding_details.update({f'channel_{channel}':
+                encodings[:,channel]})
+
+        #numPlots = int(len(sequences)/10)
+        numPlots = 50
+        encodings = encodings.reshape((encodings.shape[0],-1))
+        outputs_rhs = outputs_rhs.reshape((encodings.shape[0],-1))
+        origDataTmp = np.array(sequences[:10*numPlots:10])
+        numChannels = origDataTmp.shape[2]
+
+        ylim = []
+        ylimEnc = [encodings.min() - 0.1*abs(encodings.min()),
+                encodings.max() + 0.1*abs(encodings.max())]
+        ylimOutRhs = [outputs_rhs.min() - 0.1*abs(outputs_rhs.min()),
+                outputs_rhs.max() + 0.1*abs(outputs_rhs.max())]
+        ylimEncRhs = [encodings_rhs.min() - 0.1*abs(encodings_rhs.min()),
+                encodings_rhs.max() + 0.1*abs(encodings_rhs.max())]
+        ylimLatent = [min(list([*ylimEnc,*ylimOutRhs])),max(list([*ylimEnc,*ylimOutRhs]))]
+        for channelInd in range(numChannels):
+            channelMin = origDataTmp[:,:,channelInd].min()
+            channelMax = origDataTmp[:,:,channelInd].max()
+            ylim.append([channelMin - 0.1*abs(channelMin), channelMax +
+                0.1*abs(channelMax)])
+
+        fig, ax = plt.subplots(numChannels+3,1, figsize = (15,10))
+        lns = []
+        for i in range(numChannels+3):
+            lns.append(ax[i].plot([],[]))
+        lns.append(ax[0].plot([],[]))
+
+        def init():
+            ax[0].set_ylim(ylimLatent)
+            ax[0].set_xlim(0,encodings.shape[1]+1)
+            ax[1].set_ylim(ylimLatent)
+            ax[1].set_xlim(0,encodings.shape[1]+1)
+            ax[2].set_ylim(ylimEncRhs)
+            ax[2].set_xlim(0,encodings_rhs.shape[1]+1)
+            for channelInd in range(numChannels):
+                ax[channelInd+3].set_ylim(ylim[channelInd])
+                ax[channelInd+3].set_xlim(0,
+                        origDataTmp[0,:,channelInd].shape[0]-1)
+
+        def update(frame):
+            print(frame)
+            xdata = np.linspace(1,encodings.shape[1],encodings.shape[1])
+            lns[0][0].set_data(xdata, encodings[int(frame)*10])
+            xdata = np.linspace(1,outputs_rhs.shape[1],outputs_rhs.shape[1])
+            lns[-1][0].set_data(xdata, outputs_rhs[int(frame)*10])
+            xdata = np.linspace(1,outputs_rhs.shape[1],outputs_rhs.shape[1])
+            lns[1][0].set_data(xdata, outputs_rhs[int(frame)*10])
+            xdata = np.linspace(1,encodings_rhs.shape[1],encodings_rhs.shape[1])
+            lns[2][0].set_data(xdata, encodings_rhs[int(frame)*10])
+            for channelInd in range(numChannels):
+                length = origDataTmp[int(frame),:,channelInd].shape[0]
+                xdata = range(length)
+                lns[channelInd+3][0].set_data(xdata,
+                        origDataTmp[int(frame),:,channelInd])
+
+        ani = FuncAnimation(fig, update, frames = range(numPlots),
+                init_func = init)
+        os.chdir('tmp')
+        ani.save('test.mp4')
+        os.chdir('../')
 
 class ACEModule(nn.Module, PyTorchUtils):
     def __init__(self, n_features: int, sequence_length: int, hidden_size1: int, hidden_size2: int, seed: int, gpu: int):

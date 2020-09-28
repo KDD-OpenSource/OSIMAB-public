@@ -18,7 +18,7 @@ class CatmanDataset(RealDataset):
         super().__init__(
             name='OSIMAB Dataset', raw_path='osimab-data', file_name=file_name[0]
         )
-        
+
         self.processed_path = [
                 os.path.join(os.path.dirname(os.path.abspath(__file__)),
                     "../../data/processed/", f)

@@ -338,19 +338,38 @@ class Evaluator:
         i += 1
         c = cmap(i / grid)
 
+        scoreYLimMin = (np.min(np.concatenate(
+            [det.prediction_details['scores_rhs'],
+            det.prediction_details['scores_lhs'],
+            score
+                ])))
+        scoreYLimMax = (np.max(np.concatenate(
+            [det.prediction_details['scores_rhs'],
+            det.prediction_details['scores_lhs'],
+            score
+                ])))
+        scoreYLim = (scoreYLimMin, scoreYLimMax)
         axes[i].set_title('scores')
         axes[i].plot(score, color=c)
+        axes[i].set_ylim(scoreYLim)
         i += 1
+        for key, values in det.prediction_details.items():
+            if key == 'scores_lhs' or key == 'scores_rhs':
+                axes[i].set_title(key)
+                axes[i].set_ylim(scoreYLim)
+                axes[i].plot(values, color=c)
+                i += 1
         c = cmap(i / grid)
 
+        # Todo: think about how to reorder the prediction_details
         for key, values in det.prediction_details.items():
+            if key == 'scores_lhs' or key == 'scores_rhs':
+                # Todo: replace by command to just skip the current iterantion
+                # of the for-loop
+                break
             axes[i].set_title(key)
-            # print(np.shape(values))
             max_val = np.max(np.max(values))
             min_val = np.min(np.min(values))
-
-            # print(max_val)
-            # print(min_val)
             if values.ndim == 1:
                 axes[i].plot(values, color=c)
                 axes[i].set_ylim(min_val, max_val)
@@ -362,58 +381,12 @@ class Evaluator:
                     i += 1
             else:
                 self.logger.warning('plot_details: not sure what to do')
-            
             c = cmap(i / grid)
-
-        #num_tsnePlots = len(det.encoding_details)
-        #fig_enc, ax = plt.subplots(num_tsnePlots,1,
-        #        figsize=(15,1.5*num_tsnePlots))
-        #i = 0
-        #for key, values in det.encoding_details.items():
-        #    enc_tsne = TSNE(n_components=2).fit_transform(values[:1000])
-        #    ax[i].scatter(enc_tsne[:,0], enc_tsne[:,1])
-        #    i = i+1
-        #fig_enc.tight_layout()
-        #self.store(fig_enc, f'tsne_{det.name}_{ds.name}')
 
         fig.tight_layout()
         if store:
             self.store(fig, f'details_{det.name}_{ds.name}')
         return fig
-
-    #def plot_points(self, det, ds store=True):
-
-    #    encodings = np.concatenate(encodings)
-    #    encodings_rhs = np.concatenate(encodings_rhs)
-    #    outputs_rhs = np.concatenate(outputs_rhs)
-    #    for channel in range(self.input_size):
-    #        self.encoding_details.update({f'channel_{channel}':
-    #            encodings[:,channel]})
-
-    #    num_plots = 100
-    #    encodings = encodings.reshape((encodings.shape[0],-1))
-    #    outputs_rhs = outputs_rhs.reshape((encodings.shape[0],-1))
-    #    origDataTmp = np.array(sequences[:10*num_plots:10])
-    #    numChannels = origDataTmp.shape[2]
-    #    ylim = []
-    #    for channelInd in range(numChannels):
-    #        channelMin = origDataTmp[:,:,channelInd].min()
-    #        channelMax = origDataTmp[:,:,channelInd].max()
-    #        ylim.append([1.1*channelMin, 1.1*channelMax])
-
-    #    for i in range(num_plots):
-    #        fig, ax = plt.subplots(numChannels+3,1, figsize =(15,10))
-    #        ax[0].plot(encodings[i*10])
-    #        ax[1].plot(outputs_rhs[i*10])
-    #        ax[2].plot(encodings_rhs[i*10])
-    #        for channelInd in range(numChannels):
-    #            ax[channelInd+3].plot(origDataTmp[i,:,channelInd])
-    #            ax[channelInd+3].set_ylim(ylim[channelInd])
-
-    #        if store:
-    #            self.store(fig, f'points_{i}_{det.name}_{ds.name}')
-    #        plt.close('all')
-
 
     # create boxplot diagrams for auc values for each algorithm/dataset per algorithm/dataset
 

@@ -1,7 +1,7 @@
 
 ctx:                        'Training with Sigmoid Act'
 
-epoch:                      20
+epoch:                      10
 
 ace:
   seq_len:                  100
