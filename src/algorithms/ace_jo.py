@@ -18,7 +18,9 @@ from .algorithm_utils import Algorithm, PyTorchUtils
 class AutoEncoderJO(Algorithm, PyTorchUtils):
     def __init__(self, name: str='AutoEncoderJO', num_epochs: int=10, batch_size: int=20, lr: float=1e-4,
                  hidden_size1: int=5, hidden_size2: int=2, sequence_length: int=30, train_gaussian_percentage: float=0.25,
-                 seed: int=123, gpu: int=None, details=True, latentVideo=True,train_max=None, sensor_specific = True):
+                 seed: int=123, gpu: int=None, details=True,
+                 latentVideo=True,train_max=None, sensor_specific = True,
+                 corr_loss = True):
         Algorithm.__init__(self, __name__, name, seed, details=details)
         PyTorchUtils.__init__(self, seed, gpu)
         self.num_epochs = num_epochs
@@ -82,9 +84,15 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                                            sampler=SubsetRandomSampler(indices[split_point:]), pin_memory=True)
 
         self.input_size = X.shape[1]
-        self.aed = ACEModule(self.input_size, self.sequence_length, self.hidden_size1, self.hidden_size2, seed=self.seed,
-                                     gpu=self.gpu)
-        self.to_device(self.aed)  # .double()
+        if self.aed == None:
+            self.aed = ACEModule(self.input_size, self.sequence_length,
+                    self.hidden_size1, self.hidden_size2, seed=self.seed,
+                    gpu=self.gpu)
+            self.to_device(self.aed)  # .double()
+        elif len(self.aed._encoder) != X.shape[1]:
+            raise Exception('You cannot continue training the autoencoder,'\
+                'because the autoencoders structure does not match the'\
+                'structuro of the data.')
         optimizer = torch.optim.Adam(self.aed.parameters(), lr=self.lr)
 
         self.aed.train()

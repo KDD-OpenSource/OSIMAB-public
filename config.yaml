@@ -1,13 +1,13 @@
 
-ctx:                        'Training with Sigmoid Act'
+ctx:                        'TestContTrainingAE'
 
-epoch:                      10
+epoch:                      1
 
 ace:
   seq_len:                  100
   hiddenSize1:              5
   hiddenSize2:              5
-  train_per:                0.7
+  train_per:                0.3
   LR:                       0.001
   sensor_spec_loss:         True
   corr_loss:                True
@@ -15,7 +15,7 @@ ace:
 testSize:                   30000
 
 dataset:
-  regexp_bin:               ''
-  regexp_sensor:            ''
+  regexp_bin:               'OSIMAB_2020_06_26_*.zip'
+  regexp_sensor:            ['N_F3.*INC']
   impute_anomaly:           True
 

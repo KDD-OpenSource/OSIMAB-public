@@ -135,9 +135,9 @@ class Evaluator:
             return threshold[np.argmax(f_score)]
 
     def evaluate(self):
-        for ds in progressbar.progressbar(self.datasets):
-            (X_train, y_train, X_test, y_test) = ds.data()
-            for det in progressbar.progressbar(self.detectors):
+        for det in progressbar.progressbar(self.detectors):
+            for ds in progressbar.progressbar(self.datasets):
+                (X_train, y_train, X_test, y_test) = ds.data()
                 self.logger.info(f'Training {det.name} on {ds.name} with seed {self.seed}')
                 try:
                     det.fit(X_train.copy())
@@ -151,7 +151,8 @@ class Evaluator:
                     self.logger.error(f'An exception occurred while training {det.name} on {ds}: {e}')
                     self.logger.error(traceback.format_exc())
                     self.results[(ds.name, det.name)] = np.zeros_like(y_test)
-            gc.collect()
+                ds._data = None
+                gc.collect()
 
     def benchmarks(self) -> pd.DataFrame:
         df = pd.DataFrame()
