@@ -102,6 +102,8 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         beta = 0
         #beta = 0
         for epoch in trange(self.num_epochs):
+            epochLossLhs = 0
+            epochLossRhs = 0
             latentSpace = []
             logging.debug(f'Epoch {epoch+1}/{self.num_epochs}.')
             for ts_batch in train_loader:
@@ -125,6 +127,8 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                     loss2 += torch.mean(self.corr_loss(output[1],
                         output[2].view((ts_batch.size()[0], -1)).data))
 
+                epochLossLhs += loss1
+                epochLossRhs += loss2
                 (alpha*loss1 + beta*loss2).backward()
                 optimizer.step()
             #alpha/=2
@@ -136,6 +140,8 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             latentSpace = np.vstack(list(map(lambda x:x.detach().numpy(),
                 latentSpace)))
             print(f'Epoch {epoch}')
+            print(f'Epoch Loss Lhs: {epochLossLhs}')
+            print(f'Epoch Loss Rhs: {epochLossRhs}')
             print('Mean of Latent Space is:')
             print(latentSpace.mean(axis = 0))
             print('Standard Deviation of Latent Space is:')
@@ -161,6 +167,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             error = nn.L1Loss(reduce=False)(
                     output[1].view(output[2].shape), output[2]).sum(axis=2)
             error_vectors += list(error.view(-1, output[2].shape[1]).data.cpu().numpy())
+
 
         self.mean_rhs = np.mean(error_vectors, axis=0)
         self.cov_rhs = np.cov(error_vectors, rowvar=False)

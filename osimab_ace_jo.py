@@ -15,9 +15,8 @@ from pprint import pprint
 
 import random
 
-def detectors(seed):
+def detectors(seed, cfg):
     # Reading config
-    cfg = config(external_path="config.yaml")
     dets = [AutoEncoderJO(num_epochs=cfg.epoch,
         hidden_size1 = cfg.ace.hiddenSize1,
         hidden_size2 = cfg.ace.hiddenSize2,
@@ -37,20 +36,24 @@ def main():
 
 def evaluate_osimab_jo():
     seed = 42
-    cfg = config(external_path="config.yaml")
-    pathnamesRegExp = '/osimab/data/itc-prod2.com/' + cfg.dataset.regexp_bin
-    pathnames = glob.glob(pathnamesRegExp)
-    filenames = [os.path.basename(pathname) for pathname in pathnames]
-    print('Used binfiles:')
-    pprint(filenames)
-    datasets = [OSIMABDataset(cfg, file_name = filename) for filename in
-        filenames]
-    evaluator = Evaluator(datasets, detectors, seed=seed, cfg = cfg)
-    evaluator.evaluate()
-    result = evaluator.benchmarks()
-    evaluator.plot_roc_curves()
-    evaluator.plot_threshold_comparison()
-    evaluator.plot_scores()
+    cfgs = []
+    for elem in os.listdir('./configs'):
+        cfgs.append(config(external_path='./configs/'+elem))
+    for cfg in cfgs:
+        pathnamesRegExp = os.path.join( os.path.dirname( os.path.dirname(
+            os.getcwd())) , 'data/itc-prod2.com/') + cfg.dataset.regexp_bin
+        pathnames = glob.glob(pathnamesRegExp)
+        filenames = [os.path.basename(pathname) for pathname in pathnames]
+        print('Used binfiles:')
+        pprint(filenames)
+        datasets = [OSIMABDataset(cfg, file_name = filename) for filename in
+            filenames]
+        evaluator = Evaluator(datasets, detectors, seed=seed, cfg = cfg)
+        evaluator.evaluate()
+        result = evaluator.benchmarks()
+        evaluator.plot_roc_curves()
+        evaluator.plot_threshold_comparison()
+        evaluator.plot_scores()
 
 
 if __name__ == '__main__':

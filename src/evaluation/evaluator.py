@@ -51,10 +51,11 @@ class Evaluator:
         self.benchmark_results = None
         # Last passed seed value in evaluate()
         self.seed = seed
+        self.cfg = cfg
 
     @property
     def detectors(self):
-        detectors = self._detectors(self.seed)
+        detectors = self._detectors(self.seed, self.cfg)
         assert np.unique([x.name for x in detectors]).size == len(detectors), 'Some detectors have the same name!'
         return detectors
 
@@ -141,6 +142,16 @@ class Evaluator:
                 self.logger.info(f'Training {det.name} on {ds.name} with seed {self.seed}')
                 try:
                     det.fit(X_train.copy())
+                except Exception as e:
+                    self.logger.error(f'An exception occurred while training {det.name} on {ds}: {e}')
+                    self.logger.error(traceback.format_exc())
+                    self.results[(ds.name, det.name)] = np.zeros_like(y_test)
+                ds._data = None
+                gc.collect()
+            for ds in progressbar.progressbar(self.datasets):
+                (X_train, y_train, X_test, y_test) = ds.data()
+                self.logger.info(f'Testing {det.name} on {ds.name} with seed {self.seed}')
+                try:
                     score = det.predict(X_test.copy())
                     self.results[(ds.name, det.name)] = score
                     try:
@@ -148,7 +159,7 @@ class Evaluator:
                     except Exception:
                         pass
                 except Exception as e:
-                    self.logger.error(f'An exception occurred while training {det.name} on {ds}: {e}')
+                    self.logger.error(f'An exception occurred while testing {det.name} on {ds}: {e}')
                     self.logger.error(traceback.format_exc())
                     self.results[(ds.name, det.name)] = np.zeros_like(y_test)
                 ds._data = None
