@@ -156,7 +156,9 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             #error_vectors += list(error.view(-1, X.shape[1]).data.cpu().numpy())
 
         self.mean = np.mean(error_vectors, axis=0)
+        print(f'Mean lhs Errors: {self.mean}')
         self.cov = np.cov(error_vectors, rowvar=False)
+        print(f'Cov lhs Errors: {self.cov}')
 
         error_vectors = []
         for ts_batch in train_gaussian_loader:
@@ -170,7 +172,9 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
 
 
         self.mean_rhs = np.mean(error_vectors, axis=0)
+        print(f'Mean rhs Errors: {self.mean_rhs}')
         self.cov_rhs = np.cov(error_vectors, rowvar=False)
+        print(f'Cov rhs Errors: {self.cov_rhs}')
 
     def predict(self, X: pd.DataFrame) -> np.array:
         X.interpolate(inplace=True)
