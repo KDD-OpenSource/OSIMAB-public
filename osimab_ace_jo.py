@@ -23,8 +23,10 @@ def detectors(seed, cfg):
         lr = cfg.ace.LR,
         sequence_length = cfg.ace.seq_len,
         latentVideo = False,
+        train_max = cfg.ace.train_max,
         sensor_specific = cfg.ace.sensor_spec_loss,
         corr_loss=cfg.ace.corr_loss,
+        num_error_vects=cfg.ace.num_error_vects,
         seed=seed)]
 
     return sorted(dets, key=lambda x: x.framework)
@@ -38,11 +40,15 @@ def evaluate_osimab_jo():
     seed = 42
     cfgs = []
     for elem in os.listdir('./configs'):
-        cfgs.append(config(external_path='./configs/'+elem))
+        if elem[-1] == 'l':
+            cfgs.append(config(external_path='./configs/'+elem))
     for cfg in cfgs:
-        pathnamesRegExp = os.path.join( os.path.dirname( os.path.dirname(
-            os.getcwd())) , 'data/itc-prod2.com/') + cfg.dataset.regexp_bin
-        pathnames = glob.glob(pathnamesRegExp)
+        pathnames = []
+        for regexp_bin in cfg.dataset.regexp_bin:
+            pathnamesRegExp = os.path.join( os.path.dirname( os.path.dirname(
+                os.getcwd())) , 'data/itc-prod2.com/') + regexp_bin
+            pathnames.append(glob.glob(pathnamesRegExp))
+        pathnames = [path for paths in pathnames for path in paths]
         filenames = [os.path.basename(pathname) for pathname in pathnames]
         print('Used binfiles:')
         pprint(filenames)
