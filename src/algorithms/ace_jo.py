@@ -53,6 +53,11 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         self.error_vects_lhs = []
         self.error_vects_rhs = []
         self.num_error_vects = num_error_vects
+        self.anomaly_tresholds_lhs = []
+        self.anomaly_tresholds_rhs = []
+        self.anomaly_tresholds_comb_lhs = None
+        self.anomaly_tresholds_comb_rhs = None
+        self.anomaly_values = None
 
         self.encoding_details = {}
 
@@ -251,6 +256,11 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             )
 
     def predict(self, X: pd.DataFrame) -> np.array:
+        self.anomaly_tresholds_lhs = np.random.uniform(low=5, high=10, size=X.shape[1])
+        self.anomaly_tresholds_rhs = np.random.uniform(low=5, high=10, size=X.shape[1])
+        self.anomaly_tresholds_comb_lhs = 1
+        self.anomaly_tresholds_comb_rhs = 1
+        # 36 lines to be commented out
         if (
             self.mean_lhs is None
             or self.cov_lhs is None
@@ -287,7 +297,6 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 self.cov_rhs = np.cov(
                     error_rhs_sorted[-self.num_error_vects :], rowvar=False
                 )
-        # is self.error_vects_lhs as large as self.error_vects_rhs?
         X.interpolate(inplace=True)
         X.bfill(inplace=True)
         data = X.values
@@ -301,6 +310,8 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         )
 
         self.aed.eval()
+
+        ## 12 lines to be commented out
         # For LHS
         mvnormal = multivariate_normal(self.mean_lhs, self.cov_lhs, allow_singular=True)
         # For RHS
@@ -396,45 +407,91 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         scores_lhs = np.nanmean(lattice_lhs, axis=0)
         scores_rhs = np.nanmean(lattice_rhs, axis=0)
 
-        if self.details:
-            scoresSensors_lhs = np.concatenate(scoresSensors_lhs)
-            # new
-            scoresSensors_lhs = (
-                np.repeat(scoresSensors_lhs, self.sequence_length, axis=1)
-                .reshape(
-                    X.shape[0] - self.sequence_length + 1,
-                    X.shape[1],
-                    self.sequence_length,
-                )
-                .transpose(0, 2, 1)
+        scoresSensors_lhs = np.concatenate(scoresSensors_lhs)
+        # new
+        scoresSensors_lhs = (
+            np.repeat(scoresSensors_lhs, self.sequence_length, axis=1)
+            .reshape(
+                X.shape[0] - self.sequence_length + 1,
+                X.shape[1],
+                self.sequence_length,
             )
-            lattice = np.full((self.sequence_length, X.shape[0], X.shape[1]), np.nan)
-            for i, scoreSensor_lhs in enumerate(scoresSensors_lhs):
-                lattice[
-                    i % self.sequence_length, i : i + self.sequence_length, :
-                ] = scoreSensor_lhs
-            self.prediction_details.update(
-                {"scoresSensors_lhs": np.nanmean(lattice, axis=0).T}
-            )
+            .transpose(0, 2, 1)
+        )
+        lattice = np.full((self.sequence_length, X.shape[0], X.shape[1]), np.nan)
+        for i, scoreSensor_lhs in enumerate(scoresSensors_lhs):
+            lattice[
+                i % self.sequence_length, i : i + self.sequence_length, :
+            ] = scoreSensor_lhs
+        scoresSensors_lhs = np.nanmean(lattice, axis=0).T
 
-            scoresSensors_rhs = np.concatenate(scoresSensors_rhs)
-            scoresSensors_rhs = (
-                np.repeat(scoresSensors_rhs, self.sequence_length, axis=1)
-                .reshape(
-                    X.shape[0] - self.sequence_length + 1,
-                    X.shape[1],
-                    self.sequence_length,
-                )
-                .transpose(0, 2, 1)
+        scoresSensors_rhs = np.concatenate(scoresSensors_rhs)
+        scoresSensors_rhs = (
+            np.repeat(scoresSensors_rhs, self.sequence_length, axis=1)
+            .reshape(
+                X.shape[0] - self.sequence_length + 1,
+                X.shape[1],
+                self.sequence_length,
             )
-            lattice = np.full((self.sequence_length, X.shape[0], X.shape[1]), np.nan)
-            for i, scoreSensor_rhs in enumerate(scoresSensors_rhs):
-                lattice[
-                    i % self.sequence_length, i : i + self.sequence_length, :
-                ] = scoreSensor_rhs
-            self.prediction_details.update(
-                {"scoresSensors_rhs": np.nanmean(lattice, axis=0).T}
-            )
+            .transpose(0, 2, 1)
+        )
+        lattice = np.full((self.sequence_length, X.shape[0], X.shape[1]), np.nan)
+        for i, scoreSensor_rhs in enumerate(scoresSensors_rhs):
+            lattice[
+                i % self.sequence_length, i : i + self.sequence_length, :
+            ] = scoreSensor_rhs
+        scoresSensors_rhs = np.nanmean(lattice, axis=0).T
+        anomalyValues_lhs = scoresSensors_lhs.T > self.anomaly_tresholds_lhs
+        anomalyValues_rhs = scoresSensors_rhs.T > self.anomaly_tresholds_rhs
+
+        combinedAnomalyValues = np.logical_or(anomalyValues_lhs, anomalyValues_rhs)
+        combinedAnomalyValues_Ints = np.zeros(shape=X.shape)
+        combinedAnomalyValues_Ints[combinedAnomalyValues == True] = 1
+        self.anomaly_values = pd.DataFrame(
+            columns=X.columns, data=combinedAnomalyValues
+        )
+
+        if self.details:
+            # scoresSensors_lhs = np.concatenate(scoresSensors_lhs)
+            ## new
+            # scoresSensors_lhs = (
+            #    np.repeat(scoresSensors_lhs, self.sequence_length, axis=1)
+            #    .reshape(
+            #        X.shape[0] - self.sequence_length + 1,
+            #        X.shape[1],
+            #        self.sequence_length,
+            #    )
+            #    .transpose(0, 2, 1)
+            # )
+            # lattice = np.full((self.sequence_length, X.shape[0], X.shape[1]), np.nan)
+            # for i, scoreSensor_lhs in enumerate(scoresSensors_lhs):
+            #    lattice[
+            #        i % self.sequence_length, i : i + self.sequence_length, :
+            #    ] = scoreSensor_lhs
+            # self.prediction_details.update(
+            #    {"scoresSensors_lhs": np.nanmean(lattice, axis=0).T}
+            # )
+            self.prediction_details.update({"scoresSensors_lhs": scoresSensors_lhs})
+
+            # scoresSensors_rhs = np.concatenate(scoresSensors_rhs)
+            # scoresSensors_rhs = (
+            #    np.repeat(scoresSensors_rhs, self.sequence_length, axis=1)
+            #    .reshape(
+            #        X.shape[0] - self.sequence_length + 1,
+            #        X.shape[1],
+            #        self.sequence_length,
+            #    )
+            #    .transpose(0, 2, 1)
+            # )
+            # lattice = np.full((self.sequence_length, X.shape[0], X.shape[1]), np.nan)
+            # for i, scoreSensor_rhs in enumerate(scoresSensors_rhs):
+            #    lattice[
+            #        i % self.sequence_length, i : i + self.sequence_length, :
+            #    ] = scoreSensor_rhs
+            # self.prediction_details.update(
+            # {"scoresSensors_rhs": np.nanmean(lattice, axis=0).T}
+            # )
+            self.prediction_details.update({"scoresSensors_rhs": scoresSensors_rhs})
 
             outputs = np.concatenate(outputs)
             lattice = np.full((self.sequence_length, X.shape[0], X.shape[1]), np.nan)
