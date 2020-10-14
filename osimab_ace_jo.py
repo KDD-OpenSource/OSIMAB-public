@@ -49,7 +49,7 @@ def evaluate_osimab_jo():
             cfgs.append(config(external_path=os.path.join("./configs/", file_name)))
     for cfg in cfgs:
         pathnames = []
-        for regexp_bin in cfg.dataset.regexp_bin:
+        for regexp_bin in cfg.dataset.regexp_bin_train:
             pathnamesRegExp = (
                 os.path.join(
                     "/osimab/data/itc-prod2.com/",
