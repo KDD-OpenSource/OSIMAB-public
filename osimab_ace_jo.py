@@ -50,12 +50,7 @@ def evaluate_osimab_jo():
     for cfg in cfgs:
         pathnames = []
         for regexp_bin in cfg.dataset.regexp_bin_train:
-            pathnamesRegExp = (
-                os.path.join(
-                    cfg.dataset.data_dir,
-                    regexp_bin
-                )
-            )
+            pathnamesRegExp = os.path.join(cfg.dataset.data_dir, regexp_bin)
             pathnames.append(glob.glob(pathnamesRegExp))
         pathnames = [path for paths in pathnames for path in paths]
         filenames = [os.path.basename(pathname) for pathname in pathnames]
