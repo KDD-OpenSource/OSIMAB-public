@@ -52,9 +52,9 @@ def evaluate_osimab_jo():
         for regexp_bin in cfg.dataset.regexp_bin:
             pathnamesRegExp = (
                 os.path.join(
-                    os.path.dirname(os.path.dirname(os.getcwd())), "data/itc-prod2.com/"
+                    "/osimab/data/itc-prod2.com/",
+                    regexp_bin
                 )
-                + regexp_bin
             )
             pathnames.append(glob.glob(pathnamesRegExp))
         pathnames = [path for paths in pathnames for path in paths]
