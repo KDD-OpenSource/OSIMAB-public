@@ -41,7 +41,7 @@ def catman_to_df(files, columns=None, standardize=True):
     return df_list
 
 
-def read_catman_file(file_name):
+def read_catman_file(file_name, WIM_flg = False):
     cm_reader = CatmanRead()
     if re.match('.*\.bin$', file_name):
         cm_reader.open_file(file_name)
@@ -50,17 +50,23 @@ def read_catman_file(file_name):
     cm_reader.read_all_header_data()
 
     info_df = cm_reader.channel_info_to_df()
+    #filter out measuring rates
+    info_df = info_df.loc[-(info_df['Channel Name'].str.contains(r'.*essrate.*'))]
+    if WIM_flg == False:
+        info_df = info_df.loc[-(info_df['Channel Name'].str.contains(r'.*WIM.*'))]
     channel_names = info_df['Channel Name']
     trim_pattern = r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}_'
-    channel_names = [re.sub(trim_pattern, '', channel)
-                     for channel in channel_names]
+    #channel_names = [re.sub(trim_pattern, '', channel)
+    #                 for channel in channel_names]
     data_dict = {}
 
     target_values = info_df['Number of Values'].max()
     target_frequency = info_df['Sampling Frequency'].max()
     measure_time = target_values / target_frequency
     target_index = np.arange(0, measure_time, 1/target_frequency)
-    for n in range(cm_reader.no_of_channels):
+    # here must be something like enumerate(channel_names)
+    #for n in range(cm_reader.no_of_channels):
+    for n in info_df.index:
         channel_name = re.sub(trim_pattern, '', channel_names[n])
         channel_data = cm_reader.return_channel_data_n(n)
         frequency = info_df['Sampling Frequency'][n]
@@ -82,7 +88,6 @@ def main():
     #files = glob.glob('/osimab/data/itc-prod2.com/*03_12*.zip')
     #files = glob.glob('/osimab/data/itc-prod2.com/*04_01_19*.zip')
     files = glob.glob('../../data/raw/*2020_04*.bin')
-    import pdb; pdb.set_trace()
     sensorData = catman_to_df(files)
     sensorDataFiltered = []
     regexs = ['N_F2_INC']
@@ -100,7 +105,6 @@ def main():
             tmp = df.filter(regex = regex)[:numrows]
             filteredDF = pd.concat([filteredDF, tmp], axis = 1)
         sensorDataFiltered.append(filteredDF)
-    import pdb; pdb.set_trace()
     for index in range(len(files)):
         #sensorDataFiltered[index].to_csv('OSIMABData_03_12_'+str(index)+'.csv', index = False)
         #sensorDataFiltered[index].to_csv('OSIMABData_04_01_19_F6_SG.csv', index = False)

@@ -45,7 +45,8 @@ class OSIMABDataset(RealDataset):
 
         scaler = StandardScaler()
         #scaler = MinMaxScaler()
-        scaler.fit(train)
+        #scaler.fit(train)
+        scaler.fit(df)
         train = standardize(train, scaler)
         test = standardize(test, scaler)
 
@@ -60,13 +61,16 @@ class OSIMABDataset(RealDataset):
         #df = pd.read_csv(self.processed_path)
         df = catman_to_df(self.processed_path)[0]
         df = filterSensors(df, self.cfg.dataset.regexp_sensor)
+        scaler = StandardScaler()
+        scaler.fit(df)
 
         n_train = int(df.shape[0] * self.cfg.ace.train_per)
         #train = df.iloc[:n_train, 2:7]
         train = df.iloc[:n_train]
-        scaler = StandardScaler()
         #scaler = MinMaxScaler()
-        train = pd.DataFrame(scaler.fit_transform(train), columns=train.columns)
+        #scaler = StandardScaler()
+        #train = pd.DataFrame(scaler.fit_transform(train), columns=train.columns)
+        train = pd.DataFrame(scaler.transform(train), columns=train.columns)
         #test = df.iloc[n_train:, 2:7]
         # take a random index
         #rand_idx = random.randint(n_train, df.shape[0]-1-test_len)
@@ -80,14 +84,14 @@ class OSIMABDataset(RealDataset):
         dur = int(test.shape[0]/10)
         num_channels = df.shape[1]
         idxs = test.shape[0] - dur
-        idxs = np.random.choice(idxs, 1*num_channels)
+        idxs = np.random.choice(idxs, max(1*num_channels,5))
 
         for idx in idxs:
             channel = np.random.choice(num_channels,1)[0]
             #tmp = test.iloc[dur*idx:dur*(idx+1),channel]
             tmp = test.iloc[idx:idx+dur,channel]
             #tmp = tmp.shift(periods=np.random.choice(100,1)[0]+1, fill_value=np.mean(tmp))
-            tmp = tmp.shift(int(dur/2), fill_value=np.mean(tmp))
+            tmp = tmp.shift(int(dur/2), fill_value=np.mean(tmp)+2)
             #test.iloc[dur*idx:dur*(idx+1),channel] = tmp
             test.iloc[idx:idx+dur,channel] = tmp
             #test_label.iloc[dur*idx:dur*(idx+1)] = 1

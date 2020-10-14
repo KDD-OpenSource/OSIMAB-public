@@ -7,6 +7,7 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 import os
 from scipy.stats import multivariate_normal
+from scipy.stats import norm
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 from tqdm import trange
@@ -20,7 +21,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                  hidden_size1: int=5, hidden_size2: int=2, sequence_length: int=30, train_gaussian_percentage: float=0.25,
                  seed: int=123, gpu: int=None, details=True,
                  latentVideo=True,train_max=None, sensor_specific = True,
-                 corr_loss = True):
+                 corr_loss = True, num_error_vects = None):
         Algorithm.__init__(self, __name__, name, seed, details=details)
         PyTorchUtils.__init__(self, seed, gpu)
         self.num_epochs = num_epochs
@@ -35,11 +36,14 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         self.train_gaussian_percentage = train_gaussian_percentage
         self.train_max = train_max
         self.latentVideo = latentVideo
+        self.error_vects_lhs = []
+        self.error_vects_rhs = []
+        self.num_error_vects = num_error_vects
 
         self.encoding_details = {}
 
         self.aed = None
-        self.mean, self.cov = None, None
+        self.mean_lhs, self.cov_lhs = None, None
         self.mean_rhs, self.cov_rhs = None, None
 
     def sensor_specific_loss(self, yhat, y):
@@ -75,13 +79,21 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         data = X.values
         sequences = [data[i:i + self.sequence_length] for i in range(data.shape[0] - self.sequence_length + 1)]
         indices = np.random.permutation(len(sequences))
-        split_point = len(sequences) - int(self.train_gaussian_percentage * len(sequences))
-        if self.train_max is not None:
-            split_point = min(self.train_max, split_point)
+        if self.train_max is None:
+            self.train_max = 1
+        train_max_point = int(self.train_max*len(sequences))
+        #split_point = len(sequences) - int(self.train_gaussian_percentage * len(sequences))
+        split_point = train_max_point - int(self.train_gaussian_percentage *
+                train_max_point)
+        #if self.train_max is not None:
+            #train_max_point = int(self.train_max*len(sequences))
+            #split_point = min(train_max_point, split_point)
         train_loader = DataLoader(dataset=sequences, batch_size=self.batch_size, drop_last=True,
                                   sampler=SubsetRandomSampler(indices[:split_point]), pin_memory=True)
+        #train_gaussian_loader = DataLoader(dataset=sequences, batch_size=self.batch_size, drop_last=True,
+                                           #sampler=SubsetRandomSampler(indices[split_point:]), pin_memory=True)
         train_gaussian_loader = DataLoader(dataset=sequences, batch_size=self.batch_size, drop_last=True,
-                                           sampler=SubsetRandomSampler(indices[split_point:]), pin_memory=True)
+                                           sampler=SubsetRandomSampler(indices[split_point:train_max_point]), pin_memory=True)
 
         self.input_size = X.shape[1]
         if self.aed == None:
@@ -148,35 +160,73 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             print(latentSpace.std(axis = 0))
 
         self.aed.eval()
-        error_vectors = []
-        for ts_batch in train_gaussian_loader:
-            output = self.aed(self.to_var(ts_batch))
-            error = nn.L1Loss(reduce=False)(output[0], self.to_var(ts_batch.float()))
-            error_vectors += list(error.reshape(-1, X.shape[1]).data.cpu().numpy())
-            #error_vectors += list(error.view(-1, X.shape[1]).data.cpu().numpy())
+        #error_vectors = []
+        #for ts_batch in train_gaussian_loader:
+        #    output = self.aed(self.to_var(ts_batch))
+        #    error_lhs = nn.L1Loss(reduce=False)(output[0], self.to_var(ts_batch.float()))
+        #    error_vectors += list(error_lhs.reshape(-1, X.shape[1]).data.cpu().numpy())
+        #    #error_vectors += list(error_lhs.view(-1, X.shape[1]).data.cpu().numpy())
 
-        self.mean = np.mean(error_vectors, axis=0)
-        print(f'Mean lhs Errors: {self.mean}')
-        self.cov = np.cov(error_vectors, rowvar=False)
-        print(f'Cov lhs Errors: {self.cov}')
+        #self.mean_lhs = np.mean(error_vectors, axis=0)
+        #print(f'Mean lhs Errors: {self.mean_lhs}')
+        #self.cov_lhs = np.cov(error_vectors, rowvar=False)
+        #print(f'Cov lhs Errors: {self.cov_lhs}')
 
-        error_vectors = []
+        #error_vectors = []
+        #for ts_batch in train_gaussian_loader:
+        #    output = self.aed(self.to_var(ts_batch), return_latent = True)
+        #    # old error did not sum over the latent space for each sensor
+        #    #error_lhs = nn.L1Loss(reduce=False)(output[1], output[2].view((ts_batch.size()[0], -1)).data)
+        #    #new error sums latent space errors for each sensor
+        #    error_lhs = nn.L1Loss(reduce=False)(
+        #            output[1].view(output[2].shape), output[2]).sum(axis=2)
+        #    error_vectors += list(error_lhs.view(-1, output[2].shape[1]).data.cpu().numpy())
+
+
+        #self.mean_rhs = np.mean(error_vectors, axis=0)
+        #print(f'Mean rhs Errors: {self.mean_rhs}')
+        #self.cov_rhs = np.cov(error_vectors, rowvar=False)
+        #print(f'Cov rhs Errors: {self.cov_rhs}')
         for ts_batch in train_gaussian_loader:
+            #import pdb; pdb.set_trace()
             output = self.aed(self.to_var(ts_batch), return_latent = True)
-            # old error did not sum over the latent space for each sensor
-            #error = nn.L1Loss(reduce=False)(output[1], output[2].view((ts_batch.size()[0], -1)).data)
-            #new error sums latent space errors for each sensor
-            error = nn.L1Loss(reduce=False)(
-                    output[1].view(output[2].shape), output[2]).sum(axis=2)
-            error_vectors += list(error.view(-1, output[2].shape[1]).data.cpu().numpy())
-
-
-        self.mean_rhs = np.mean(error_vectors, axis=0)
-        print(f'Mean rhs Errors: {self.mean_rhs}')
-        self.cov_rhs = np.cov(error_vectors, rowvar=False)
-        print(f'Cov rhs Errors: {self.cov_rhs}')
+            #error_lhs = nn.L1Loss(reduce=False)(output[0],
+                    #self.to_var(ts_batch.float()))
+            error_lhs = nn.L1Loss(reduce=False)(output[0],
+                    self.to_var(ts_batch.float())).mean(axis=1)
+            self.error_vects_lhs += list(error_lhs.reshape(-1,
+                X.shape[1]).data.cpu().numpy())
+            error_rhs = nn.L1Loss(reduce=False)(
+                    output[1].view(output[2].shape), output[2]).mean(axis=2)
+            self.error_vects_rhs += list(error_rhs.view(-1,
+                output[2].shape[1]).data.cpu().numpy())
 
     def predict(self, X: pd.DataFrame) -> np.array:
+        if (self.mean_lhs is None or self.cov_lhs is None or self.mean_rhs is
+                None or self.cov_rhs is None):
+            error_lhs_stacked = np.vstack(self.error_vects_lhs)
+            error_lhs_sorted = np.sort(np.expand_dims(error_lhs_stacked,
+                axis=error_lhs_stacked.ndim),
+                axis=0).reshape(error_lhs_stacked.shape)
+            error_rhs_stacked = np.vstack(self.error_vects_rhs)
+            error_rhs_sorted = np.sort(np.expand_dims(error_rhs_stacked,
+                axis=error_rhs_stacked.ndim),
+                axis=0).reshape(error_rhs_stacked.shape)
+            if self.num_error_vects == None:
+                self.mean_lhs = np.mean(self.error_vects_lhs, axis=0)
+                self.var_lhs = np.var(self.error_vects_lhs, axis = 0)
+                self.cov_lhs = np.cov(self.error_vects_lhs, rowvar = False)
+                self.mean_rhs = np.mean(self.error_vects_rhs, axis=0)
+                self.var_rhs = np.var(self.error_vects_rhs, axis = 0)
+                self.cov_rhs = np.cov(self.error_vects_rhs, rowvar = False)
+            else:
+                self.mean_lhs = np.mean(error_lhs_sorted[-self.num_error_vects:], axis=0)
+                self.var_lhs = np.var(error_lhs_sorted[-self.num_error_vects:], axis = 0)
+                self.cov_lhs = np.cov(error_lhs_sorted[-self.num_error_vects:], rowvar = False)
+                self.mean_rhs = np.mean(error_rhs_sorted[-self.num_error_vects:], axis=0)
+                self.var_rhs = np.var(error_rhs_sorted[-self.num_error_vects:], axis = 0)
+                self.cov_rhs = np.cov(error_rhs_sorted[-self.num_error_vects:], rowvar = False)
+        # is self.error_vects_lhs as large as self.error_vects_rhs? 
         X.interpolate(inplace=True)
         X.bfill(inplace=True)
         data = X.values
@@ -186,30 +236,65 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
 
         self.aed.eval()
         # For LHS
-        mvnormal = multivariate_normal(self.mean, self.cov, allow_singular=True)
+        mvnormal = multivariate_normal(self.mean_lhs, self.cov_lhs, allow_singular=True)
         # For RHS
         mvnormal_rhs = multivariate_normal(self.mean_rhs, self.cov_rhs, allow_singular=True)
+        sensorNormals_lhs = []
+        for mean, var in zip(self.mean_lhs, self.var_lhs):
+            sensorNormals_lhs.append(norm(loc = mean, scale = var))
+        sensorNormals_rhs = []
+        for mean, var in zip(self.mean_rhs, self.var_rhs):
+            sensorNormals_rhs.append(norm(loc = mean, scale = var))
 
         scores_lhs = []
+        scoresSensors_lhs = []
         scores_rhs = []
+        scoresSensors_rhs = []
         outputs = []
 
         encodings = []
         encodings_rhs = []
 
         outputs_rhs = []
-        errors = []
+        errors_lhs = []
         errors_rhs = []
         for idx, ts in enumerate(data_loader):
             output = self.aed(self.to_var(ts), return_latent=True)
-            error = nn.L1Loss(reduce=False)(output[0], self.to_var(ts.float()))
-            score = -mvnormal.logpdf(error.reshape(-1, X.shape[1]).data.cpu().numpy())
-            scores_lhs.append(score.reshape(ts.size(0), self.sequence_length))
+            #error_lhs = nn.L1Loss(reduce=False)(output[0],
+                    #self.to_var(ts.float()))
+            #error_lhs = np.repeat(nn.L1Loss(reduce=False)(
+            #    output[0],
+            #    self.to_var(ts.float())).mean(axis=1).detach().numpy(), 
+            #    self.sequence_length, axis=0).reshape(ts.size(0),
+            #            self.sequence_length, X.shape[1])
+            error_lhs = nn.L1Loss(reduce=False)(output[0],
+                    self.to_var(ts.float())).mean(axis=1)
+            scoreSensor_lhs = np.zeros(error_lhs.shape)
+            # check if the right slice is taken
+            for sensorInd in range(X.shape[1]):
+                #scoreSensor_lhs[:,:,sensorInd] = -sensorNormals_lhs[sensorInd].logpdf(
+                        #error_lhs[:,:,sensorInd].data.cpu()
+                scoreSensor_lhs[:,sensorInd] = -sensorNormals_lhs[sensorInd].logpdf(
+                        error_lhs[:,sensorInd].data.cpu()
+                        )
+            scoresSensors_lhs.append(scoreSensor_lhs)
+            score_lhs = -mvnormal.logpdf(error_lhs.reshape(-1, X.shape[1]).data.cpu().numpy())
+            #new
+            score_lhs = np.repeat(score_lhs,
+                    self.sequence_length).reshape(ts.size(0),
+                            self.sequence_length)
+            scores_lhs.append(score_lhs.reshape(ts.size(0), self.sequence_length))
 
             #we spread the error for each sensor over the entire length of 100
             # timesteps
             error_rhs = nn.L1Loss(reduce=False)(
-                output[1].view(output[2].shape), output[2]).sum(axis=2)
+                output[1].view(output[2].shape), output[2]).mean(axis=2)
+            scoreSensor_rhs = np.zeros(error_rhs.shape)
+            for sensorInd in range(X.shape[1]):
+                scoreSensor_rhs[:,sensorInd] = -sensorNormals_rhs[sensorInd].logpdf(
+                        error_rhs[:,sensorInd].data.cpu()
+                        )
+            scoresSensors_rhs.append(scoreSensor_rhs)
             score_rhs = -mvnormal_rhs.logpdf(error_rhs.view(-1,
                 output[2].shape[1]).data.cpu().numpy())
             score_rhs = np.repeat(score_rhs,
@@ -217,12 +302,16 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                             self.sequence_length)
             scores_rhs.append(score_rhs)
 
+
+
+
+
             if self.details:
                 outputs.append(output[0].data.numpy())
                 encodings.append(output[2].data.numpy())
                 encodings_rhs.append(output[3].data.numpy())
                 outputs_rhs.append(output[1].data.numpy())
-                errors.append(error.data.numpy())
+                errors_lhs.append(error_lhs.data.numpy())
                 errors_rhs.append(error_rhs.data.numpy())
 
         # stores seq_len-many scores per timestamp and averages them
@@ -238,17 +327,47 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         scores_lhs = np.nanmean(lattice_lhs, axis=0)
         scores_rhs = np.nanmean(lattice_rhs, axis=0)
 
+
+
         if self.details:
+            scoresSensors_lhs = np.concatenate(scoresSensors_lhs)
+            #new
+            scoresSensors_lhs = np.repeat(scoresSensors_lhs,
+                    self.sequence_length,
+                    axis=1).reshape(X.shape[0]-self.sequence_length+1,
+                            X.shape[1], self.sequence_length).transpose(0,2,1)
+            lattice=np.full((self.sequence_length, X.shape[0], X.shape[1]),
+                    np.nan)
+            for i, scoreSensor_lhs in enumerate(scoresSensors_lhs):
+                lattice[i % self.sequence_length, i:i + self.sequence_length,
+                        :] = scoreSensor_lhs
+            self.prediction_details.update({'scoresSensors_lhs':
+                np.nanmean(lattice, axis=0).T})
+
+            scoresSensors_rhs = np.concatenate(scoresSensors_rhs)
+            scoresSensors_rhs = np.repeat(scoresSensors_rhs,
+                    self.sequence_length,
+                    axis=1).reshape(X.shape[0]-self.sequence_length+1,
+                            X.shape[1], self.sequence_length).transpose(0,2,1)
+            lattice=np.full((self.sequence_length, X.shape[0], X.shape[1]),
+                    np.nan)
+            for i, scoreSensor_rhs in enumerate(scoresSensors_rhs):
+                lattice[i % self.sequence_length, i:i + self.sequence_length,
+                        :] = scoreSensor_rhs
+            self.prediction_details.update({'scoresSensors_rhs':
+                np.nanmean(lattice, axis=0).T})
+
             outputs = np.concatenate(outputs)
             lattice = np.full((self.sequence_length, X.shape[0], X.shape[1]), np.nan)
             for i, output in enumerate(outputs):
                 lattice[i % self.sequence_length, i:i + self.sequence_length, :] = output
             self.prediction_details.update({'reconstructions_mean': np.nanmean(lattice, axis=0).T})
 
-            errors = np.concatenate(errors)
+            errors_lhs = np.concatenate(errors_lhs)
             lattice = np.full((self.sequence_length, X.shape[0], X.shape[1]), np.nan)
-            for i, error in enumerate(errors):
-                lattice[i % self.sequence_length, i:i + self.sequence_length, :] = error
+            for i, error_lhs in enumerate(errors_lhs):
+                lattice[i % self.sequence_length, i:i + self.sequence_length,
+                        :] = error_lhs
             self.prediction_details.update({'errors_mean': np.nanmean(lattice, axis=0).T})
 
             # Adding the rhs error by summing it for each sensor and then
@@ -280,8 +399,8 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
     def save(self, f):
         torch.save({
             'model_state_dict': self.aed.state_dict(),
-            'mean': self.mean,
-            'cov': self.cov,
+            'mean': self.mean_lhs,
+            'cov': self.cov_lhs,
             'input_size': self.input_size,
             'sequence_length': self.sequence_length,
             'hidden_size1': self.hidden_size1,
