@@ -18,8 +18,9 @@ from .algorithm_utils import Algorithm, PyTorchUtils
 class AutoEncoderJO(Algorithm, PyTorchUtils):
     def __init__(self, name: str='AutoEncoderJO', num_epochs: int=10, batch_size: int=20, lr: float=1e-4,
                  hidden_size1: int=5, hidden_size2: int=2, sequence_length: int=30, train_gaussian_percentage: float=0.25,
-                 seed: int=123, gpu: int=None, details=True, latentVideo=True,train_max=None, sensor_specific = True,
-                 corr_loss=False):
+                 seed: int=123, gpu: int=None, details=True,
+                 latentVideo=True,train_max=None, sensor_specific = True,
+                 corr_loss = True):
         Algorithm.__init__(self, __name__, name, seed, details=details)
         PyTorchUtils.__init__(self, seed, gpu)
         self.num_epochs = num_epochs
@@ -83,9 +84,15 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                                            sampler=SubsetRandomSampler(indices[split_point:]), pin_memory=True)
 
         self.input_size = X.shape[1]
-        self.aed = ACEModule(self.input_size, self.sequence_length, self.hidden_size1, self.hidden_size2, seed=self.seed,
-                                     gpu=self.gpu)
-        self.to_device(self.aed)  # .double()
+        if self.aed == None:
+            self.aed = ACEModule(self.input_size, self.sequence_length,
+                    self.hidden_size1, self.hidden_size2, seed=self.seed,
+                    gpu=self.gpu)
+            self.to_device(self.aed)  # .double()
+        elif len(self.aed._encoder) != X.shape[1]:
+            raise Exception('You cannot continue training the autoencoder,'\
+                'because the autoencoders structure does not match the'\
+                'structuro of the data.')
         optimizer = torch.optim.Adam(self.aed.parameters(), lr=self.lr)
 
         self.aed.train()
@@ -95,6 +102,8 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         beta = 0
         #beta = 0
         for epoch in trange(self.num_epochs):
+            epochLossLhs = 0
+            epochLossRhs = 0
             latentSpace = []
             logging.debug(f'Epoch {epoch+1}/{self.num_epochs}.')
             for ts_batch in train_loader:
@@ -118,6 +127,8 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                     loss2 += torch.mean(self.corr_loss(output[1],
                         output[2].view((ts_batch.size()[0], -1)).data))
 
+                epochLossLhs += loss1
+                epochLossRhs += loss2
                 (alpha*loss1 + beta*loss2).backward()
                 optimizer.step()
             #alpha/=2
@@ -129,6 +140,8 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             latentSpace = np.vstack(list(map(lambda x:x.detach().numpy(),
                 latentSpace)))
             print(f'Epoch {epoch}')
+            print(f'Epoch Loss Lhs: {epochLossLhs}')
+            print(f'Epoch Loss Rhs: {epochLossRhs}')
             print('Mean of Latent Space is:')
             print(latentSpace.mean(axis = 0))
             print('Standard Deviation of Latent Space is:')
@@ -143,7 +156,9 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             #error_vectors += list(error.view(-1, X.shape[1]).data.cpu().numpy())
 
         self.mean = np.mean(error_vectors, axis=0)
+        print(f'Mean lhs Errors: {self.mean}')
         self.cov = np.cov(error_vectors, rowvar=False)
+        print(f'Cov lhs Errors: {self.cov}')
 
         error_vectors = []
         for ts_batch in train_gaussian_loader:
@@ -155,8 +170,11 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                     output[1].view(output[2].shape), output[2]).sum(axis=2)
             error_vectors += list(error.view(-1, output[2].shape[1]).data.cpu().numpy())
 
+
         self.mean_rhs = np.mean(error_vectors, axis=0)
+        print(f'Mean rhs Errors: {self.mean_rhs}')
         self.cov_rhs = np.cov(error_vectors, rowvar=False)
+        print(f'Cov rhs Errors: {self.cov_rhs}')
 
     def predict(self, X: pd.DataFrame) -> np.array:
         X.interpolate(inplace=True)

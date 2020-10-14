@@ -1,8 +1,12 @@
 import pandas as pd
+from pprint import pprint
 import numpy as np
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import random
 from .real_datasets import RealDataset
+from .catman_data import catman_to_df
+import os
+
 
 
 class OSIMABDataset(RealDataset):
@@ -10,9 +14,10 @@ class OSIMABDataset(RealDataset):
         if file_name is None:
             file_name = 'osimab-data.csv'
         super().__init__(
-            #name='OSIMAB Dataset', raw_path='osimab-data', file_name=file_name
             name=file_name, raw_path='osimab-data', file_name=file_name
         )
+        self.processed_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                           '../../../../data/itc-prod2.com/', file_name))
         self.cfg = cfg
 
     def load(self):
@@ -23,7 +28,11 @@ class OSIMABDataset(RealDataset):
         self._data = (a, b, c, d)
 
     def get_data_osimab(self, test_len):
-        df = pd.read_csv(self.processed_path)
+        # must be replaced by the procedure of reading the zip file and
+        # filtering for the right sensors
+        #df = pd.read_csv(self.processed_path)
+        df = catman_to_df(self.processed_path)[0]
+        df = filterSensors(df, self.cfg.dataset.regexp_sensor)
 
         n_train = int(df.shape[0] * self.cfg.ace.train_per)
         train = df.iloc[:n_train]
@@ -46,7 +55,11 @@ class OSIMABDataset(RealDataset):
         return (train, train_label), (test, test_label)
 
     def get_data_osimab_with_anomaly(self, test_len):
-        df = pd.read_csv(self.processed_path)
+        # must be replaced by the procedure of reading the zip file and
+        # filtering for the right sensors
+        #df = pd.read_csv(self.processed_path)
+        df = catman_to_df(self.processed_path)[0]
+        df = filterSensors(df, self.cfg.dataset.regexp_sensor)
 
         n_train = int(df.shape[0] * self.cfg.ace.train_per)
         #train = df.iloc[:n_train, 2:7]
@@ -88,3 +101,14 @@ def standardize(df, scaler):
     data = scaler.transform(df)
     return pd.DataFrame(data, columns=columns)
 
+
+def filterSensors(sensorData, regexs):
+    sensorDataFiltered = []
+    for df in [sensorData]:
+        filteredDF = pd.DataFrame()
+        for regex in regexs:
+            tmp = df.filter(regex = regex)
+            filteredDF = pd.concat([filteredDF, tmp], axis = 1)
+            pprint(tmp.columns)
+        sensorDataFiltered.append(filteredDF)
+    return sensorDataFiltered[0]
