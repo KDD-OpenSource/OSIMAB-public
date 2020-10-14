@@ -46,7 +46,7 @@ def evaluate_osimab_jo():
     cfgs = []
     for file_name in os.listdir("./configs"):
         if file_name.endswith(".yaml"):
-            cfgs.append(config(external_path="./configs/" + file_name))
+            cfgs.append(config(external_path=os.path.join("./configs/", file_name)))
     for cfg in cfgs:
         pathnames = []
         for regexp_bin in cfg.dataset.regexp_bin:
