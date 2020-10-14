@@ -44,24 +44,19 @@ def main():
 def evaluate_osimab_jo():
     seed = 42
     cfgs = []
-    for elem in os.listdir("./configs"):
-        if elem[-1] == "l":
-            cfgs.append(config(external_path="./configs/" + elem))
+    for file_name in os.listdir("./configs"):
+        if file_name.endswith(".yaml"):
+            cfgs.append(config(external_path=os.path.join("./configs/", file_name)))
     for cfg in cfgs:
         pathnames = []
-        for regexp_bin in cfg.dataset.regexp_bin:
-            pathnamesRegExp = (
-                os.path.join(
-                    os.path.dirname(os.path.dirname(os.getcwd())), "data/itc-prod2.com/"
-                )
-                + regexp_bin
-            )
+        for regexp_bin in cfg.dataset.regexp_bin_train:
+            pathnamesRegExp = os.path.join(cfg.dataset.data_dir, regexp_bin)
             pathnames.append(glob.glob(pathnamesRegExp))
         pathnames = [path for paths in pathnames for path in paths]
         filenames = [os.path.basename(pathname) for pathname in pathnames]
         print("Used binfiles:")
         pprint(filenames)
-        datasets = [OSIMABDataset(cfg, file_name=filename) for filename in filenames]
+        datasets = [OSIMABDataset(cfg, file_name=filename) for filename in pathnames]
         evaluator = Evaluator(datasets, detectors, seed=seed, cfg=cfg)
         evaluator.evaluate()
         result = evaluator.benchmarks()
