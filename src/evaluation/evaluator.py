@@ -372,7 +372,7 @@ class Evaluator:
         for key, values in det.prediction_details.items():
             if key == 'scores_lhs' or key == 'scores_rhs':
                 axes[i].set_title(key)
-                axes[i].set_ylim(scoreYLim)
+                #axes[i].set_ylim(scoreYLim)
                 axes[i].plot(values, color=c)
                 i += 1
         c = cmap(i / grid)
