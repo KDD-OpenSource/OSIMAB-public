@@ -14,13 +14,11 @@ class MultivariateAnomalyFunction:
     # are passed through. Throws AttributeError if attribute was not found.
     @staticmethod
     def get_multivariate_dataset(method, name=None, group_size=None, *args, **kwargs):
-        name = name or f'Synthetic Multivariate {method} Curve Outliers'
+        name = name or f"Synthetic Multivariate {method} Curve Outliers"
         func = getattr(MultivariateAnomalyFunction, method)
-        return SyntheticMultivariateDataset(anomaly_func=func,
-                                            name=name,
-                                            group_size=group_size,
-                                            *args,
-                                            **kwargs)
+        return SyntheticMultivariateDataset(
+            anomaly_func=func, name=name, group_size=group_size, *args, **kwargs
+        )
 
     @staticmethod
     def doubled(curve_values, anomalous, _):
@@ -49,7 +47,9 @@ class MultivariateAnomalyFunction:
             # No curve during the other curve in the 1st dimension
             nonce = np.zeros(len(curve_values))
             # Insert a curve with the same amplitude during the pause of the 1st dimension
-            new_curve = MultivariateAnomalyFunction.shrink_curve(curve_values, pause_length)
+            new_curve = MultivariateAnomalyFunction.shrink_curve(
+                curve_values, pause_length
+            )
             return np.concatenate([nonce, new_curve]), -1, -1
         else:
             # Anomaly: curves overlap (at the same time or at least half overlapping)
@@ -78,7 +78,9 @@ class MultivariateAnomalyFunction:
         if not anomalous:
             # The curve in the second dimension occurs a few timestamps later
             nonce = np.zeros(starting_point)
-            new_curve = MultivariateAnomalyFunction.shrink_curve(curve_values, new_curve_length)
+            new_curve = MultivariateAnomalyFunction.shrink_curve(
+                curve_values, new_curve_length
+            )
             values = np.concatenate([nonce, new_curve])
             return values, -1, -1
         else:
@@ -89,6 +91,7 @@ class MultivariateAnomalyFunction:
     """
         This is a helper function for shrinking an already generated curve.
     """
+
     @staticmethod
     def shrink_curve(curve_values, new_length):
         if new_length == len(curve_values):

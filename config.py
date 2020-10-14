@@ -1,9 +1,10 @@
-
 import yaml
+
 
 class Dummy:
     def __init__(*args, **kwargs):
         pass
+
 
 class config:
     def __init__(self, external_path=None):
@@ -14,15 +15,14 @@ class config:
             self.config_dict = {}
             for doc in docs:
                 for k, v in doc.items():
-                    cmd = "self."+k+"=Dummy()"
+                    cmd = "self." + k + "=Dummy()"
                     exec(cmd)
                     if type(v) is dict:
                         for k1, v1 in v.items():
-                            cmd = "self."+k+"." + k1 + "=" + repr(v1)
+                            cmd = "self." + k + "." + k1 + "=" + repr(v1)
                             exec(cmd)
                     else:
-                        cmd = "self."+k+"="+repr(v)
+                        cmd = "self." + k + "=" + repr(v)
                         exec(cmd)
                 self.config_dict = doc
             stream.close()
-

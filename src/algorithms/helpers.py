@@ -6,17 +6,21 @@ def average_sequences(sequences, sequence_length, output_shape, stride=1):
     if isinstance(output_shape, int):
         output_shape = (output_shape,)
     sequences = np.concatenate(sequences)
-    lattice = np.full((sequence_length, *output_shape), np.nan) 
+    lattice = np.full((sequence_length, *output_shape), np.nan)
     for i, sequence in enumerate(sequences):
-        lattice[i*stride % sequence_length, i*stride:i*stride + sequence_length] = sequence
+        lattice[
+            i * stride % sequence_length, i * stride : i * stride + sequence_length
+        ] = sequence
     sequences = np.nanmean(lattice, axis=0).T
     return sequences
 
 
 def make_sequences(data, sequence_length, stride=1):
     if not isinstance(data, (pd.DataFrame, list)):
-        raise TypeError('data must be of type pd.DataFrame or list.'
-            'The type of data was {}.'.format(type(data)))
+        raise TypeError(
+            "data must be of type pd.DataFrame or list."
+            "The type of data was {}.".format(type(data))
+        )
 
     if isinstance(data, pd.DataFrame):
         data = [data]
@@ -27,8 +31,10 @@ def make_sequences(data, sequence_length, stride=1):
         df = df.bfill()
         df = df.values
 
-        n_sequences = int((df.shape[0] - sequence_length)/stride) + 1
-        sequences = [df[i*stride:i*stride + sequence_length] for i in range(n_sequences)]
+        n_sequences = int((df.shape[0] - sequence_length) / stride) + 1
+        sequences = [
+            df[i * stride : i * stride + sequence_length] for i in range(n_sequences)
+        ]
         sequences = np.array(sequences)
         seq_list.append(sequences)
 
@@ -38,8 +44,7 @@ def make_sequences(data, sequence_length, stride=1):
 
 def split_sequences(sequences, percentage):
     if percentage > 1 or percentage < 0:
-        raise ValueError('percentage must be within [0,1],'
-                'was {}'.format(percentage))
+        raise ValueError("percentage must be within [0,1]," "was {}".format(percentage))
     indices = np.random.permutation(len(sequences))
     split_point = int(len(sequences) * percentage)
     seq1 = sequences[indices[:split_point]]

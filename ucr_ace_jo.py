@@ -26,5 +26,5 @@ def evaluate_ucr_jo():
     evaluator.plot_scores()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

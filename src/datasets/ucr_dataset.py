@@ -5,11 +5,12 @@ from sklearn.preprocessing import StandardScaler
 from .real_datasets import RealDataset
 import tslearn.datasets as dataset
 
+
 class UCRDataset(RealDataset):
     def __init__(self):
-        file_name = 'ucr-data.csv'
+        file_name = "ucr-data.csv"
         super().__init__(
-            name='UCR Dataset', raw_path='osimab-data', file_name=file_name
+            name="UCR Dataset", raw_path="osimab-data", file_name=file_name
         )
 
     def load(self):
@@ -26,17 +27,17 @@ class UCRDataset(RealDataset):
         y_train = pd.Series(np.repeat(y_train, np.shape(X_train)[1], axis=0))
         y_test = pd.Series(np.repeat(y_test, np.shape(X_test)[1], axis=0))
 
-        p = y_train=="0" # Anomaly
+        p = y_train == "0"  # Anomaly
         y_train[p] = 1
         y_train[~p] = 0
 
-        p = y_test=="0" # Anomaly
+        p = y_test == "0"  # Anomaly
         y_test[p] = 1
         y_test[~p] = 0
         y_test = y_test.values.tolist()
 
-        X_train = pd.DataFrame(X_train.reshape(-1,np.shape(X_train)[-1]))
-        X_test = pd.DataFrame(X_test.reshape(-1,np.shape(X_test)[-1]))
+        X_train = pd.DataFrame(X_train.reshape(-1, np.shape(X_train)[-1]))
+        X_test = pd.DataFrame(X_test.reshape(-1, np.shape(X_test)[-1]))
 
         scaler = StandardScaler()
         X_train = pd.DataFrame(scaler.fit_transform(X_train), columns=X_train.columns)
