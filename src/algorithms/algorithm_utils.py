@@ -48,7 +48,11 @@ class PyTorchUtils(metaclass=abc.ABCMeta):
 
     @property
     def device(self):
-        return torch.device(f'cuda:{self.gpu}' if torch.cuda.is_available() and self.gpu is not None else 'cpu')
+        return torch.device(
+            f"cuda:{self.gpu}"
+            if torch.cuda.is_available() and self.gpu is not None
+            else "cpu"
+        )
 
     def to_var(self, t, **kwargs):
         # ToDo: check whether cuda Variable.
@@ -70,6 +74,5 @@ class TensorflowUtils(metaclass=abc.ABCMeta):
     @property
     def device(self):
         local_device_protos = device_lib.list_local_devices()
-        gpus = [x.name for x in local_device_protos if x.device_type == 'GPU']
-        return tf.device(gpus[self.gpu] if gpus and self.gpu is not None else '/cpu:0')
-
+        gpus = [x.name for x in local_device_protos if x.device_type == "GPU"]
+        return tf.device(gpus[self.gpu] if gpus and self.gpu is not None else "/cpu:0")

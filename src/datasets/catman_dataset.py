@@ -12,17 +12,18 @@ from .catman_data import catman_to_df
 class CatmanDataset(RealDataset):
     def __init__(self, file_name=None):
         if file_name is None:
-            file_name = 'osimab-data.csv'
+            file_name = "osimab-data.csv"
         if isinstance(file_name, str):
             file_name = [file_name]
         super().__init__(
-            name='OSIMAB Dataset', raw_path='osimab-data', file_name=file_name[0]
+            name="OSIMAB Dataset", raw_path="osimab-data", file_name=file_name[0]
         )
 
         self.processed_path = [
-                os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                    "../../data/processed/", f)
-                for f in file_name
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), "../../data/processed/", f
+            )
+            for f in file_name
         ]
 
     def load(self):
@@ -51,4 +52,3 @@ class CatmanDataset(RealDataset):
             test_label = pd.Series(np.zeros(test.shape[0]))
 
         return (train, train_label), (test, test_label)
-

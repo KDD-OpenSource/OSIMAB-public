@@ -15,10 +15,23 @@ from .helpers import split_sequences
 
 
 class LSTMED(Algorithm, PyTorchUtils):
-    def __init__(self, name: str='LSTM-ED', num_epochs: int=10, batch_size: int=20, lr: float=1e-3,
-                 hidden_size: int=5, sequence_length: int=30, stride: int=1, train_gaussian_percentage: float=0.25,
-                 n_layers: tuple=(1, 1), use_bias: tuple=(True, True), dropout: tuple=(0, 0),
-                 seed: int=None, gpu: int = None, details=True):
+    def __init__(
+        self,
+        name: str = "LSTM-ED",
+        num_epochs: int = 10,
+        batch_size: int = 20,
+        lr: float = 1e-3,
+        hidden_size: int = 5,
+        sequence_length: int = 30,
+        stride: int = 1,
+        train_gaussian_percentage: float = 0.25,
+        n_layers: tuple = (1, 1),
+        use_bias: tuple = (True, True),
+        dropout: tuple = (0, 0),
+        seed: int = None,
+        gpu: int = None,
+        details=True,
+    ):
         Algorithm.__init__(self, __name__, name, seed, details=details)
         PyTorchUtils.__init__(self, seed, gpu)
         self.num_epochs = num_epochs
@@ -40,23 +53,36 @@ class LSTMED(Algorithm, PyTorchUtils):
     def fit(self, X: pd.DataFrame):
         sequences = make_sequences(data=X, sequence_length=self.sequence_length)
         seq_train, seq_val = split_sequences(sequences, self.train_gaussian_percentage)
-        train_loader = DataLoader(dataset=seq_train, batch_size=self.batch_size,
-                drop_last=True, pin_memory=True)
-        train_gaussian_loader = DataLoader(dataset=seq_val,
-                batch_size=self.batch_size, drop_last=True, pin_memory=True)
+        train_loader = DataLoader(
+            dataset=seq_train,
+            batch_size=self.batch_size,
+            drop_last=True,
+            pin_memory=True,
+        )
+        train_gaussian_loader = DataLoader(
+            dataset=seq_val, batch_size=self.batch_size, drop_last=True, pin_memory=True
+        )
 
-        self.lstmed = LSTMEDModule(X.shape[1], self.hidden_size,
-                                   self.n_layers, self.use_bias, self.dropout,
-                                   seed=self.seed, gpu=self.gpu)
+        self.lstmed = LSTMEDModule(
+            X.shape[1],
+            self.hidden_size,
+            self.n_layers,
+            self.use_bias,
+            self.dropout,
+            seed=self.seed,
+            gpu=self.gpu,
+        )
         self.to_device(self.lstmed)
         optimizer = torch.optim.Adam(self.lstmed.parameters(), lr=self.lr)
 
         self.lstmed.train()
         for epoch in trange(self.num_epochs):
-            logging.debug(f'Epoch {epoch+1}/{self.num_epochs}.')
+            logging.debug(f"Epoch {epoch+1}/{self.num_epochs}.")
             for ts_batch in train_loader:
                 output = self.lstmed(self.to_var(ts_batch))
-                loss = nn.MSELoss(size_average=False)(output, self.to_var(ts_batch.float()))
+                loss = nn.MSELoss(size_average=False)(
+                    output, self.to_var(ts_batch.float())
+                )
                 self.lstmed.zero_grad()
                 loss.backward()
                 optimizer.step()
@@ -76,8 +102,12 @@ class LSTMED(Algorithm, PyTorchUtils):
         X.bfill(inplace=True)
         data = X.values
         sequences = make_sequences(data=X, sequence_length=self.sequence_length)
-        data_loader = DataLoader(dataset=sequences, batch_size=self.batch_size,
-                shuffle=False, drop_last=False)
+        data_loader = DataLoader(
+            dataset=sequences,
+            batch_size=self.batch_size,
+            shuffle=False,
+            drop_last=False,
+        )
 
         self.lstmed.eval()
         mvnormal = multivariate_normal(self.mean, self.cov, allow_singular=True)
@@ -98,7 +128,7 @@ class LSTMED(Algorithm, PyTorchUtils):
         lattice = np.full((self.sequence_length, data.shape[0]), np.nan)
         for idx, score in enumerate(scores):
             i = idx * self.stride
-            lattice[i % self.sequence_length, i:i + self.sequence_length] = score
+            lattice[i % self.sequence_length, i : i + self.sequence_length] = score
         scores = np.nanmean(lattice, axis=0)
 
         if self.details:
@@ -106,23 +136,38 @@ class LSTMED(Algorithm, PyTorchUtils):
             lattice = np.full((self.sequence_length, X.shape[0], X.shape[1]), np.nan)
             for idx, output in enumerate(outputs):
                 i = idx * self.stride
-                lattice[i % self.sequence_length, i:i + self.sequence_length, :] = output
-            self.prediction_details.update({'reconstructions_mean': np.nanmean(lattice, axis=0).T})
+                lattice[
+                    i % self.sequence_length, i : i + self.sequence_length, :
+                ] = output
+            self.prediction_details.update(
+                {"reconstructions_mean": np.nanmean(lattice, axis=0).T}
+            )
 
             errors = np.concatenate(errors)
             lattice = np.full((self.sequence_length, X.shape[0], X.shape[1]), np.nan)
             for idx, error in enumerate(errors):
                 i = idx * self.stride
-                lattice[i % self.sequence_length, i:i + self.sequence_length, :] = error
-            self.prediction_details.update({'errors_mean': np.nanmean(lattice, axis=0).T})
+                lattice[
+                    i % self.sequence_length, i : i + self.sequence_length, :
+                ] = error
+            self.prediction_details.update(
+                {"errors_mean": np.nanmean(lattice, axis=0).T}
+            )
 
         return scores
 
 
 class LSTMEDModule(nn.Module, PyTorchUtils):
-    def __init__(self, n_features: int, hidden_size: int,
-                 n_layers: tuple, use_bias: tuple, dropout: tuple,
-                 seed: int, gpu: int):
+    def __init__(
+        self,
+        n_features: int,
+        hidden_size: int,
+        n_layers: tuple,
+        use_bias: tuple,
+        dropout: tuple,
+        seed: int,
+        gpu: int,
+    ):
         super().__init__()
         PyTorchUtils.__init__(self, seed, gpu)
         self.n_features = n_features
@@ -132,25 +177,45 @@ class LSTMEDModule(nn.Module, PyTorchUtils):
         self.use_bias = use_bias
         self.dropout = dropout
 
-        self.encoder = nn.LSTM(self.n_features, self.hidden_size, batch_first=True,
-                               num_layers=self.n_layers[0], bias=self.use_bias[0], dropout=self.dropout[0])
+        self.encoder = nn.LSTM(
+            self.n_features,
+            self.hidden_size,
+            batch_first=True,
+            num_layers=self.n_layers[0],
+            bias=self.use_bias[0],
+            dropout=self.dropout[0],
+        )
         self.to_device(self.encoder)
-        self.decoder = nn.LSTM(self.n_features, self.hidden_size, batch_first=True,
-                               num_layers=self.n_layers[1], bias=self.use_bias[1], dropout=self.dropout[1])
+        self.decoder = nn.LSTM(
+            self.n_features,
+            self.hidden_size,
+            batch_first=True,
+            num_layers=self.n_layers[1],
+            bias=self.use_bias[1],
+            dropout=self.dropout[1],
+        )
         self.to_device(self.decoder)
         self.hidden2output = nn.Linear(self.hidden_size, self.n_features)
         self.to_device(self.hidden2output)
 
     def _init_hidden(self, batch_size):
-        return (self.to_var(torch.Tensor(self.n_layers[0], batch_size, self.hidden_size).zero_()),
-                self.to_var(torch.Tensor(self.n_layers[0], batch_size, self.hidden_size).zero_()))
+        return (
+            self.to_var(
+                torch.Tensor(self.n_layers[0], batch_size, self.hidden_size).zero_()
+            ),
+            self.to_var(
+                torch.Tensor(self.n_layers[0], batch_size, self.hidden_size).zero_()
+            ),
+        )
 
-    def forward(self, ts_batch, return_latent: bool=False):
+    def forward(self, ts_batch, return_latent: bool = False):
         batch_size = ts_batch.shape[0]
 
         # 1. Encode the timeseries to make use of the last hidden state.
         enc_hidden = self._init_hidden(batch_size)  # initialization with zero
-        _, enc_hidden = self.encoder(ts_batch.float(), enc_hidden)  # .float() here or .double() for the model
+        _, enc_hidden = self.encoder(
+            ts_batch.float(), enc_hidden
+        )  # .float() here or .double() for the model
 
         # 2. Use hidden state as initialization for our Decoder-LSTM
         dec_hidden = enc_hidden
@@ -164,7 +229,9 @@ class LSTMEDModule(nn.Module, PyTorchUtils):
             output[:, i, :] = self.hidden2output(dec_hidden[0][0, :])
 
             if self.training:
-                _, dec_hidden = self.decoder(ts_batch[:, i].unsqueeze(1).float(), dec_hidden)
+                _, dec_hidden = self.decoder(
+                    ts_batch[:, i].unsqueeze(1).float(), dec_hidden
+                )
             else:
                 _, dec_hidden = self.decoder(output[:, i].unsqueeze(1), dec_hidden)
 

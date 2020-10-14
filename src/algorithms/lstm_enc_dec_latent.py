@@ -10,8 +10,16 @@ class LSTMEDLatent(LSTMED):
         X.interpolate(inplace=True)
         X.bfill(inplace=True)
         data = X.values
-        sequences = [data[i:i + self.sequence_length] for i in range(data.shape[0] - self.sequence_length + 1)]
-        data_loader = DataLoader(dataset=sequences, batch_size=self.batch_size, shuffle=False, drop_last=False)
+        sequences = [
+            data[i : i + self.sequence_length]
+            for i in range(data.shape[0] - self.sequence_length + 1)
+        ]
+        data_loader = DataLoader(
+            dataset=sequences,
+            batch_size=self.batch_size,
+            shuffle=False,
+            drop_last=False,
+        )
 
         self.lstmed.eval()
         latent_vectors = []

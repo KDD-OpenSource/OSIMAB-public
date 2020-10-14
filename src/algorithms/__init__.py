@@ -13,17 +13,17 @@ from .rnn_ebm import RecurrentEBM
 from .ace_jo import AutoEncoderJO
 
 __all__ = [
-    'AutoEncoder',
-    'AutoEncoderDiff',
-    'AdversarialAutoEncoder',
-    'AdversarialAutoEncoderDiff',
-    'AutoCorrelationEncoder',
-    'DAGMM',
-    'Donut',
-    'GRUED',
-    'LSTMAD',
-    'LSTMED',
-    'LSTMEDP',
-    'RecurrentEBM',
-    'AutoEncoderJO'
+    "AutoEncoder",
+    "AutoEncoderDiff",
+    "AdversarialAutoEncoder",
+    "AdversarialAutoEncoderDiff",
+    "AutoCorrelationEncoder",
+    "DAGMM",
+    "Donut",
+    "GRUED",
+    "LSTMAD",
+    "LSTMED",
+    "LSTMEDP",
+    "RecurrentEBM",
+    "AutoEncoderJO",
 ]

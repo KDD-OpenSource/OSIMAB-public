@@ -10,15 +10,17 @@ LOG_LEVEL = logging.DEBUG
 CONSOLE_LOG_LEVEL = logging.INFO
 
 
-def init_logging(output_dir='reports/logs'):
+def init_logging(output_dir="reports/logs"):
     # Prepare directory and file path for storing the logs
-    timestamp = time.strftime('%Y-%m-%d-%H%M%S')
-    log_file_path = os.path.join(output_dir, '{}.log'.format(timestamp))
+    timestamp = time.strftime("%Y-%m-%d-%H%M%S")
+    log_file_path = os.path.join(output_dir, "{}.log".format(timestamp))
     os.makedirs(output_dir, exist_ok=True)
 
     # Actually initialize the logging module
-    log_formatter = logging.Formatter(fmt='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-                                      datefmt='%Y-%m-%d %H:%M:%S')
+    log_formatter = logging.Formatter(
+        fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
     root_logger = logging.getLogger()
     root_logger.setLevel(LOG_LEVEL)
     # Removes previous handlers (required for running pipeline multiple times)
@@ -33,12 +35,12 @@ def init_logging(output_dir='reports/logs'):
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(log_formatter)
     console_handler.setLevel(CONSOLE_LOG_LEVEL)
-    console_handler.addFilter(DebugModuleFilter(['^src\.', '^root$']))
+    console_handler.addFilter(DebugModuleFilter(["^src\.", "^root$"]))
     root_logger.addHandler(console_handler)
 
     # Create logger instance for the config file
     logger = logging.getLogger(__name__)
-    logger.debug('Logger initialized')
+    logger.debug("Logger initialized")
 
 
 class DebugModuleFilter(logging.Filter):
