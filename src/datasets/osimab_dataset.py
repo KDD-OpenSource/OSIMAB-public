@@ -13,12 +13,7 @@ class OSIMABDataset(RealDataset):
         if file_name is None:
             file_name = "osimab-data.csv"
         super().__init__(name=file_name, raw_path="osimab-data", file_name=file_name)
-        self.processed_path = os.path.abspath(
-            os.path.join(
-                "/osimab/data/itc-prod2.com/",
-                file_name,
-            )
-        )
+        self.processed_path = os.path.abspath(file_name)
         self.cfg = cfg
 
     def load(self):

@@ -52,7 +52,7 @@ def evaluate_osimab_jo():
         for regexp_bin in cfg.dataset.regexp_bin_train:
             pathnamesRegExp = (
                 os.path.join(
-                    "/osimab/data/itc-prod2.com/",
+                    cfg.dataset.data_dir,
                     regexp_bin
                 )
             )
@@ -61,7 +61,7 @@ def evaluate_osimab_jo():
         filenames = [os.path.basename(pathname) for pathname in pathnames]
         print("Used binfiles:")
         pprint(filenames)
-        datasets = [OSIMABDataset(cfg, file_name=filename) for filename in filenames]
+        datasets = [OSIMABDataset(cfg, file_name=filename) for filename in pathnames]
         evaluator = Evaluator(datasets, detectors, seed=seed, cfg=cfg)
         evaluator.evaluate()
         result = evaluator.benchmarks()
