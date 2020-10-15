@@ -14,7 +14,9 @@ class OSIMABDataset(RealDataset):
             file_name = "osimab-data.csv"
         super().__init__(name=file_name, raw_path="osimab-data", file_name=file_name)
         self.processed_path = os.path.abspath(file_name)
+        self.name = os.path.basename(file_name)
         self.cfg = cfg
+        import pdb; pdb.set_trace()
 
     def load(self):
         if self.cfg.dataset.impute_anomaly:
