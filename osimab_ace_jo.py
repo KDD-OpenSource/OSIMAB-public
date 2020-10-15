@@ -56,8 +56,7 @@ def evaluate_osimab_jo():
         filenames = [os.path.basename(pathname) for pathname in pathnames]
         print("Used binfiles:")
         pprint(filenames)
-        datasets = [OSIMABDataset(cfg, file_name=filename) for filename in
-                pathnames]
+        datasets = [OSIMABDataset(cfg, file_name=filename) for filename in pathnames]
         evaluator = Evaluator(datasets, detectors, seed=seed, cfg=cfg)
         evaluator.evaluate()
         result = evaluator.benchmarks()
