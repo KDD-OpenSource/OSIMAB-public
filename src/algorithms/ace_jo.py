@@ -62,8 +62,8 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         self.encoding_details = {}
 
         self.aed = None
-        self.mean_lhs, self.cov_lhs = None, None
-        self.mean_rhs, self.cov_rhs = None, None
+        self.mean_lhs, self.var_lhs, self.cov_lhs = None, None, None
+        self.mean_rhs, self.var_rhs, self.cov_rhs = None, None, None
 
     def sensor_specific_loss(self, yhat, y):
         # mse = nn.MSELoss()
@@ -254,6 +254,16 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             self.error_vects_rhs += list(
                 error_rhs.view(-1, output[2].shape[1]).data.cpu().numpy()
             )
+            self.update_gaussians(error_lhs, self.mean_lhs, self.cov_lhs,
+                    self.var_lhs)
+            self.update_gaussians(error_rhs, self.mean_rhs, self.cov_rhs,
+                    self.var_rhs)
+
+
+    def update_gaussians(self, error, mean, cov, var):
+        import pdb; pdb.set_trace()
+
+
 
     def predict(self, X: pd.DataFrame) -> np.array:
         self.anomaly_tresholds_lhs = np.random.uniform(low=5, high=10, size=X.shape[1])
