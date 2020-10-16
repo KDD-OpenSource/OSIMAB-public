@@ -3,6 +3,8 @@ ctx:                            'TestPredAnomalousValues'
 
 epoch:                          1
 
+isTraining:                     True
+
 ace:
     seq_len:                    100
     hiddenSize1:                5

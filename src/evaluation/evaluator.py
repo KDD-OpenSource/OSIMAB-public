@@ -4,9 +4,10 @@ import os
 import pickle
 import re
 import sys
+sys.path.append("../../")
 import traceback
 from textwrap import wrap
-
+from src.algorithms import AutoEncoderJO
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as path_effects
 from matplotlib.font_manager import FontProperties
@@ -158,28 +159,31 @@ class Evaluator:
 
     def evaluate(self):
         for det in progressbar.progressbar(self.detectors):
-            for ds in progressbar.progressbar(self.datasets):
-                (X_train, y_train, X_test, y_test) = ds.data()
-                self.logger.info(
-                    f"Training {det.name} on {ds.name} with seed {self.seed}"
-                )
-                try:
-                    det.fit(X_train.copy())
-                except Exception as e:
-                    self.logger.error(
-                        f"An exception occurred while training {det.name} on {ds}: {e}"
+            if self.cfg.isTraining:
+                for ds in progressbar.progressbar(self.datasets):
+                    (X_train, y_train, X_test, y_test) = ds.data()
+                    self.logger.info(
+                        f"Training {det.name} on {ds.name} with seed {self.seed}"
                     )
-                    self.logger.error(traceback.format_exc())
-                    self.results[(ds.name, det.name)] = np.zeros_like(y_test)
-                ds._data = None
-                gc.collect()
+                    try:
+                        det.fit(X_train.copy(), self.output_dir)
+                    except Exception as e:
+                        self.logger.error(
+                            f"An exception occurred while training {det.name} on {ds}: {e}"
+                        )
+                        self.logger.error(traceback.format_exc())
+                        self.results[(ds.name, det.name)] = np.zeros_like(y_test)
+                    ds._data = None
+                    gc.collect()
+            else:
+                det.load()
             for ds in progressbar.progressbar(self.datasets):
                 (X_train, y_train, X_test, y_test) = ds.data()
                 self.logger.info(
                     f"Testing {det.name} on {ds.name} with seed {self.seed}"
                 )
                 try:
-                    score = det.predict(X_test.copy())
+                    score = det.predict(X_test.copy(), self.output_dir)
                     self.results[(ds.name, det.name)] = score
                     try:
                         self.plot_details(det, ds, score)
@@ -193,6 +197,22 @@ class Evaluator:
                     self.results[(ds.name, det.name)] = np.zeros_like(y_test)
                 ds._data = None
                 gc.collect()
+            import pdb; pdb.set_trace()
+            det.save('results/tmp')
+            det_ = AutoEncoderJO(
+                num_epochs=1,
+                hidden_size1=5,
+                hidden_size2=5,
+                lr=0.001,
+                sequence_length=100,
+                latentVideo=False,
+                train_max=1,
+                sensor_specific=True,
+                corr_loss=True,
+                num_error_vects=None,
+                seed=2,)
+            import pdb; pdb.set_trace()
+            det_.load('results/tmp')
 
     def benchmarks(self) -> pd.DataFrame:
         df = pd.DataFrame()
