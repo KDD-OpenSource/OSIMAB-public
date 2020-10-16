@@ -1,5 +1,6 @@
 import numpy as np
-import tensorflow as tf
+
+# import tensorflow as tf
 from tqdm import trange
 
 from .algorithm_utils import Algorithm, TensorflowUtils

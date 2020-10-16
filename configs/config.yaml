@@ -1,5 +1,5 @@
 
-ctx:                            'TestPredAnomalousValues'
+ctx:                            'testNoTF_Warning'
 
 epoch:                          1
 
@@ -21,7 +21,12 @@ dataset:
     #regexp_bin:                 ['OSIMAB_2020_06_26_0[2]*.zip']
     data_dir:                   '/osimab/data/itc-prod2.com/'
     regexp_bin_train:           ['OSIMAB_2020_08_20_0[2]*.zip']
-    regexp_sensor:              ['N.*_F3.*INC.*']
+    regexp_sensor:              ['N.*_F3.*ACC.*']
     #regexp_sensor:              ['.*']
-    impute_anomaly:             True
-
+    #impute_anomaly:             True
+    anomalies:                  #Null
+        shift:                  1
+        variance:               2
+        peak:                   1
+        timeshift:              2
+        trend:                  1
