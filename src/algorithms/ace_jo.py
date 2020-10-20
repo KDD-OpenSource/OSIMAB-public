@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 from tqdm import trange
 from matplotlib.animation import FuncAnimation
+from itertools import product
 
 from .algorithm_utils import Algorithm, PyTorchUtils
 
@@ -34,7 +35,6 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         train_max=None,
         sensor_specific=True,
         corr_loss=True,
-        num_error_vects=None,
     ):
         Algorithm.__init__(self, __name__, name, seed, details=details)
         PyTorchUtils.__init__(self, seed, gpu)
@@ -52,7 +52,6 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         self.latentVideo = latentVideo
         self.error_vects_lhs = []
         self.error_vects_rhs = []
-        self.num_error_vects = num_error_vects
         self.anomaly_tresholds_lhs = []
         self.anomaly_tresholds_rhs = []
         self.anomaly_tresholds_comb_lhs = None
@@ -64,6 +63,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         self.aed = None
         self.mean_lhs, self.var_lhs, self.cov_lhs = None, None, None
         self.mean_rhs, self.var_rhs, self.cov_rhs = None, None, None
+        self.used_error_vects = 0
 
     def sensor_specific_loss(self, yhat, y):
         # mse = nn.MSELoss()
@@ -238,7 +238,6 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         # self.cov_rhs = np.cov(error_vectors, rowvar=False)
         # print(f'Cov rhs Errors: {self.cov_rhs}')
         for ts_batch in train_gaussian_loader:
-            # import pdb; pdb.set_trace()
             output = self.aed(self.to_var(ts_batch), return_latent=True)
             # error_lhs = nn.L1Loss(reduce=False)(output[0],
             # self.to_var(ts_batch.float()))
@@ -254,59 +253,56 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             self.error_vects_rhs += list(
                 error_rhs.view(-1, output[2].shape[1]).data.cpu().numpy()
             )
-            self.update_gaussians(error_lhs, self.mean_lhs, self.cov_lhs,
-                    self.var_lhs)
-            self.update_gaussians(error_rhs, self.mean_rhs, self.cov_rhs,
-                    self.var_rhs)
+            self.update_gaussians(error_lhs, error_rhs)
+
+    def update_gaussians(self, error_lhs, error_rhs):
+        (self.mean_lhs, self.cov_lhs) = self.update_gaussians_one_side(
+            error_lhs, self.mean_lhs, self.cov_lhs
+        )
+        (self.mean_rhs, self.cov_rhs) = self.update_gaussians_one_side(
+            error_rhs, self.mean_rhs, self.cov_rhs
+        )
+        self.used_error_vects += error_lhs.size()[0]
+
+    def update_gaussians_one_side(self, errors, mean, cov):
+        errors = errors.data.cpu().numpy()
+        if mean is None or cov is None:
+            mean = np.mean(errors, axis=0)
+            cov = np.cov(errors, rowvar=False)
+        else:
+            localErrorCount = 0
+            cov_dim = cov.shape[0]
+            summedcov_new = np.empty(shape=(cov.shape))
+            for error in errors:
+                # Mean Calculation
+                mean_old = mean
+                numErrorsAfterUpdate = self.used_error_vects + localErrorCount + 1
+                mean_new = (
+                    1
+                    / (numErrorsAfterUpdate)
+                    * (error + (numErrorsAfterUpdate - 1) * mean_old)
+                )
+                localErrorCount += 1
+                # Cov Calculation
+                cov_old = cov
+                numErrorsBeforeUpdate = numErrorsAfterUpdate - 1
+                summedcov_old = cov_old * numErrorsBeforeUpdate
+                for i,j in product(range(cov_dim), range(cov_dim)):
+                    summedcov_new[i,j] = (summedcov_old[i,j] + (error[i] -
+                        mean_old[i])
+                    * (error[j] - mean_new[j]))
+                cov_new = summedcov_new / numErrorsAfterUpdate
 
 
-    def update_gaussians(self, error, mean, cov, var):
-        import pdb; pdb.set_trace()
-
-
+                mean = mean_new
+                cov = cov_new
+        return mean, cov
 
     def predict(self, X: pd.DataFrame) -> np.array:
         self.anomaly_tresholds_lhs = np.random.uniform(low=5, high=10, size=X.shape[1])
         self.anomaly_tresholds_rhs = np.random.uniform(low=5, high=10, size=X.shape[1])
         self.anomaly_tresholds_comb_lhs = 1
         self.anomaly_tresholds_comb_rhs = 1
-        # 36 lines to be commented out
-        if (
-            self.mean_lhs is None
-            or self.cov_lhs is None
-            or self.mean_rhs is None
-            or self.cov_rhs is None
-        ):
-            error_lhs_stacked = np.vstack(self.error_vects_lhs)
-            error_lhs_sorted = np.sort(
-                np.expand_dims(error_lhs_stacked, axis=error_lhs_stacked.ndim), axis=0
-            ).reshape(error_lhs_stacked.shape)
-            error_rhs_stacked = np.vstack(self.error_vects_rhs)
-            error_rhs_sorted = np.sort(
-                np.expand_dims(error_rhs_stacked, axis=error_rhs_stacked.ndim), axis=0
-            ).reshape(error_rhs_stacked.shape)
-            if self.num_error_vects == None:
-                self.mean_lhs = np.mean(self.error_vects_lhs, axis=0)
-                self.var_lhs = np.var(self.error_vects_lhs, axis=0)
-                self.cov_lhs = np.cov(self.error_vects_lhs, rowvar=False)
-                self.mean_rhs = np.mean(self.error_vects_rhs, axis=0)
-                self.var_rhs = np.var(self.error_vects_rhs, axis=0)
-                self.cov_rhs = np.cov(self.error_vects_rhs, rowvar=False)
-            else:
-                self.mean_lhs = np.mean(
-                    error_lhs_sorted[-self.num_error_vects :], axis=0
-                )
-                self.var_lhs = np.var(error_lhs_sorted[-self.num_error_vects :], axis=0)
-                self.cov_lhs = np.cov(
-                    error_lhs_sorted[-self.num_error_vects :], rowvar=False
-                )
-                self.mean_rhs = np.mean(
-                    error_rhs_sorted[-self.num_error_vects :], axis=0
-                )
-                self.var_rhs = np.var(error_rhs_sorted[-self.num_error_vects :], axis=0)
-                self.cov_rhs = np.cov(
-                    error_rhs_sorted[-self.num_error_vects :], rowvar=False
-                )
         X.interpolate(inplace=True)
         X.bfill(inplace=True)
         data = X.values
@@ -321,19 +317,16 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
 
         self.aed.eval()
 
-        ## 12 lines to be commented out
-        # For LHS
         mvnormal = multivariate_normal(self.mean_lhs, self.cov_lhs, allow_singular=True)
-        # For RHS
         mvnormal_rhs = multivariate_normal(
             self.mean_rhs, self.cov_rhs, allow_singular=True
         )
         sensorNormals_lhs = []
-        for mean, var in zip(self.mean_lhs, self.var_lhs):
-            sensorNormals_lhs.append(norm(loc=mean, scale=var))
+        for mean, var in zip(self.mean_lhs, np.diagonal(self.cov_lhs)):
+            sensorNormals_lhs.append(norm(loc=mean, scale=np.sqrt(var)))
         sensorNormals_rhs = []
-        for mean, var in zip(self.mean_rhs, self.var_rhs):
-            sensorNormals_rhs.append(norm(loc=mean, scale=var))
+        for mean, var in zip(self.mean_rhs, np.diagonal(self.cov_rhs)):
+            sensorNormals_rhs.append(norm(loc=mean, scale=np.sqrt(var)))
 
         scores_lhs = []
         scoresSensors_lhs = []

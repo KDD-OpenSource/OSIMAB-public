@@ -29,7 +29,6 @@ def detectors(seed, cfg):
             train_max=cfg.ace.train_max,
             sensor_specific=cfg.ace.sensor_spec_loss,
             corr_loss=cfg.ace.corr_loss,
-            num_error_vects=cfg.ace.num_error_vects,
             seed=seed,
         )
     ]
