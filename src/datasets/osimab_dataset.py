@@ -18,6 +18,7 @@ class OSIMABDataset(RealDataset):
             file_name=file_name,
         )
         self.processed_path = os.path.abspath(file_name)
+        self.name = os.path.basename(file_name)
         self.cfg = cfg
 
     def load(self):
