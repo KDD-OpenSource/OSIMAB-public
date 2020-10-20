@@ -61,6 +61,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
 
         self.encoding_details = {}
 
+        self.aed = None
         self.mean_lhs, self.cov_lhs = None, None
         self.mean_rhs, self.cov_rhs = None, None
 

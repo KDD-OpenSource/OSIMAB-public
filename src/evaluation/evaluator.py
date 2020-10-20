@@ -4,6 +4,7 @@ import os
 import pickle
 import re
 import sys
+
 sys.path.append("../../")
 import traceback
 from textwrap import wrap
@@ -197,8 +198,8 @@ class Evaluator:
                     self.results[(ds.name, det.name)] = np.zeros_like(y_test)
                 ds._data = None
                 gc.collect()
-            import pdb; pdb.set_trace()
-            det.save('results/tmp')
+            # import pdb; pdb.set_trace()
+            det.save("results/tmp")
             det_ = AutoEncoderJO(
                 num_epochs=1,
                 hidden_size1=5,
@@ -210,9 +211,10 @@ class Evaluator:
                 sensor_specific=True,
                 corr_loss=True,
                 num_error_vects=None,
-                seed=2,)
-            import pdb; pdb.set_trace()
-            det_.load('results/tmp')
+                seed=2,
+            )
+            # import pdb; pdb.set_trace()
+            det_.load("results/tmp")
 
     def benchmarks(self) -> pd.DataFrame:
         df = pd.DataFrame()
