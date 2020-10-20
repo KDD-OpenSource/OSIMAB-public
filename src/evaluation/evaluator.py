@@ -184,7 +184,7 @@ class Evaluator:
                     f"Testing {det.name} on {ds.name} with seed {self.seed}"
                 )
                 try:
-                    score = det.predict(X_test.copy(), self.output_dir)
+                    score = det.predict(X_test.copy())
                     self.results[(ds.name, det.name)] = score
                     try:
                         self.plot_details(det, ds, score)
