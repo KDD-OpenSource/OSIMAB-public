@@ -615,7 +615,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         )
         if path:
             self.aed.load_state_dict(torch.load(os.path.join(path, "model.pth")))
-            with open(os.path.join(path, "gaussian_param.pth"), "rb") as f:
+            with open(os.path.join(path, "gaussian_param.npy"), "rb") as f:
                 self.error_vects_lhs = list(np.load(f))
                 self.error_vects_rhs = list(np.load(f))
                 self.anomaly_tresholds_lhs = np.load(f)
