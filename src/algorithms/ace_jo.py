@@ -287,12 +287,11 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 cov_old = cov
                 numErrorsBeforeUpdate = numErrorsAfterUpdate - 1
                 summedcov_old = cov_old * numErrorsBeforeUpdate
-                for i,j in product(range(cov_dim), range(cov_dim)):
-                    summedcov_new[i,j] = (summedcov_old[i,j] + (error[i] -
-                        mean_old[i])
-                    * (error[j] - mean_new[j]))
+                for i, j in product(range(cov_dim), range(cov_dim)):
+                    summedcov_new[i, j] = summedcov_old[i, j] + (
+                        error[i] - mean_old[i]
+                    ) * (error[j] - mean_new[j])
                 cov_new = summedcov_new / numErrorsAfterUpdate
-
 
                 mean = mean_new
                 cov = cov_new
