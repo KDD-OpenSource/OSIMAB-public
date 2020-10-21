@@ -1,5 +1,5 @@
 
-ctx:                            'TestPredAnomalousValues'
+ctx:                            'CodeTest'
 
 epoch:                          1
 
@@ -14,7 +14,6 @@ ace:
     LR:                         0.001
     sensor_spec_loss:           True
     corr_loss:                  True
-    num_error_vects:            Null
     warm_start:                 False
 
 testSize:                       30000
