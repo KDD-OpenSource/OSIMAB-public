@@ -92,7 +92,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         # print(cost)
         return cost
 
-    def fit(self, X: pd.DataFrame):
+    def fit(self, X: pd.DataFrame, path):
         X.interpolate(inplace=True)
         X.bfill(inplace=True)
         data = X.values
@@ -210,6 +210,9 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             print("Standard Deviation of Latent Space is:")
             print(latentSpace.std(axis=0))
 
+        torch.save(self.aed.state_dict(), os.path.join(path, "model.pth"))
+        torch.save(self.aed.state_dict(), os.path.join("./results", "model.pth"))
+
         self.aed.eval()
         # error_vectors = []
         # for ts_batch in train_gaussian_loader:
@@ -297,11 +300,20 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 cov = cov_new
         return mean, cov
 
-    def predict(self, X: pd.DataFrame) -> np.array:
         self.anomaly_tresholds_lhs = np.random.uniform(low=5, high=10, size=X.shape[1])
         self.anomaly_tresholds_rhs = np.random.uniform(low=5, high=10, size=X.shape[1])
         self.anomaly_tresholds_comb_lhs = 1
         self.anomaly_tresholds_comb_rhs = 1
+
+
+    def predict(self, X: pd.DataFrame) -> np.array:
+
+        self.aed.eval()
+        # self.anomaly_tresholds_lhs = np.random.uniform(low=5, high=10, size=X.shape[1])
+        # self.anomaly_tresholds_rhs = np.random.uniform(low=5, high=10, size=X.shape[1])
+        # self.anomaly_tresholds_comb_lhs = 1
+        # self.anomaly_tresholds_comb_rhs = 1
+
         X.interpolate(inplace=True)
         X.bfill(inplace=True)
         data = X.values
@@ -543,7 +555,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
 
         return scores_lhs + scores_rhs
 
-    def save(self, f):
+    def save(self, path):
         torch.save(
             {
                 "model_state_dict": self.aed.state_dict(),
@@ -556,24 +568,88 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 "seed": self.seed,
                 "gpu": self.gpu,
             },
-            f,
+            os.path.join(path, "model_detailed.pth"),
         )
 
-    def load(self, f):
-        checkpoint = torch.load(f)
-        model_state_dict = checkpoint["model_state_dict"]
-        del checkpoint["model_state_dict"]
-        for key in checkpoint:
-            setattr(self, key, checkpoint[key])
-        self.aed = ACEModule(
-            self.input_size,
-            self.sequence_length,
-            self.hidden_size1,
-            self.hidden_size2,
-            seed=self.seed,
-            gpu=self.gpu,
+        torch.save(
+            {
+                "model_state_dict": self.aed.state_dict(),
+                "mean": self.mean_lhs,
+                "cov": self.cov_lhs,
+                "input_size": self.input_size,
+                "sequence_length": self.sequence_length,
+                "hidden_size1": self.hidden_size1,
+                "hidden_size2": self.hidden_size2,
+                "seed": self.seed,
+                "gpu": self.gpu,
+            },
+            os.path.join("./results", "model_detailed.pth"),
         )
-        self.aed.load_state_dict(model_state_dict)
+
+        torch.save(self.aed.state_dict(), os.path.join(path, "model.pth"))
+        torch.save(self.aed.state_dict(), os.path.join("./results", "model.pth"))
+
+        with open(os.path.join(path, "gaussian_param.npy"), "wb") as f:
+            np.save(f, np.array(self.error_vects_lhs))
+            np.save(f, np.array(self.error_vects_rhs))
+            np.save(f, self.anomaly_tresholds_lhs)
+            np.save(f, self.anomaly_tresholds_rhs)
+            np.save(f, self.anomaly_tresholds_comb_lhs)
+            np.save(f, self.anomaly_tresholds_comb_rhs)
+
+        with open(os.path.join("./results", "gaussian_param.npy"), "wb") as f:
+            np.save(f, np.array(self.error_vects_lhs))
+            np.save(f, np.array(self.error_vects_rhs))
+            np.save(f, self.anomaly_tresholds_lhs)
+            np.save(f, self.anomaly_tresholds_rhs)
+            np.save(f, self.anomaly_tresholds_comb_lhs)
+            np.save(f, self.anomaly_tresholds_comb_rhs)
+
+    def load(self, path=None):
+        model_details = torch.load(os.path.join("./results", "model_detailed.pth"))
+        # import pdb; pdb.set_trace()
+        self.aed = ACEModule(
+            model_details["input_size"],
+            model_details["sequence_length"],
+            model_details["hidden_size1"],
+            model_details["hidden_size2"],
+            seed=model_details["seed"],
+            gpu=model_details["gpu"],
+        )
+        if path:
+            self.aed.load_state_dict(torch.load(os.path.join(path, "model.pth")))
+            with open(os.path.join(path, "gaussian_param.npy"), "rb") as f:
+                self.error_vects_lhs = list(np.load(f))
+                self.error_vects_rhs = list(np.load(f))
+                self.anomaly_tresholds_lhs = np.load(f)
+                self.anomaly_tresholds_rhs = np.load(f)
+                self.anomaly_tresholds_comb_lhs = np.load(f)
+                self.anomaly_tresholds_comb_rhs = np.load(f)
+        else:
+            self.aed.load_state_dict(torch.load(os.path.join("./results", "model.pth")))
+
+            with open(os.path.join("./results", "gaussian_param.npy"), "rb") as f:
+                self.error_vects_lhs = list(np.load(f))
+                self.error_vects_rhs = list(np.load(f))
+                self.anomaly_tresholds_lhs = np.load(f)
+                self.anomaly_tresholds_rhs = np.load(f)
+                self.anomaly_tresholds_comb_lhs = np.load(f)
+                self.anomaly_tresholds_comb_rhs = np.load(f)
+
+        # checkpoint = torch.load(f)
+        # model_state_dict = checkpoint["model_state_dict"]
+        # del checkpoint["model_state_dict"]
+        # for key in checkpoint:
+        #     setattr(self, key, checkpoint[key])
+        # self.aed = ACEModule(
+        #     self.input_size,
+        #     self.sequence_length,
+        #     self.hidden_size1,
+        #     self.hidden_size2,
+        #     seed=self.seed,
+        #     gpu=self.gpu,
+        # )
+        # self.aed.load_state_dict(model_state_dict)
 
     def createLatentVideo(self, encodings, encodings_rhs, outputs_rhs, sequences):
         # save in folder 'latentVideos' with timestamp?
