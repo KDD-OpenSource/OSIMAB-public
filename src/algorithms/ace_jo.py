@@ -305,7 +305,6 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         self.anomaly_tresholds_comb_lhs = 1
         self.anomaly_tresholds_comb_rhs = 1
 
-
     def predict(self, X: pd.DataFrame) -> np.array:
 
         self.aed.eval()
