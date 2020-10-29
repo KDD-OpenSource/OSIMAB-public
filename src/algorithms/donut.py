@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import six
 
-# import tensorflow as tf
+import tensorflow as tf
 from donut import (
     DonutTrainer,
     DonutPredictor,

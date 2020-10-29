@@ -2,7 +2,11 @@ import numpy as np
 
 from src.datasets import OSIMABDataset
 from src.evaluation import Evaluator
+from src.algorithms import AutoEncoder
+from src.algorithms import LSTMEDP
+from src.algorithms import LSTMED
 from src.algorithms import AutoEncoderJO
+from src.algorithms import AutoCorrelationEncoder
 from config import config
 import random
 import glob

@@ -5,8 +5,8 @@ import random
 import numpy as np
 import torch
 
-# import tensorflow as tf
-# from tensorflow.python.client import device_lib
+import tensorflow as tf
+from tensorflow.python.client import device_lib
 from torch.autograd import Variable
 
 
