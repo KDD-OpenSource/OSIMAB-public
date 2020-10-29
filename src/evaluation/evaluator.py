@@ -421,7 +421,7 @@ class Evaluator:
         for value in det.prediction_details.values():
             grid += 1 if value.ndim == 1 else value.shape[0]
         grid += X_test.shape[1]  # data
-        grid += 1 + 1 + 1# score, gt and prediction
+        grid += 1 + 1 + 1  # score, gt and prediction
 
         fig, axes = plt.subplots(grid, 1, figsize=(15, 1.5 * grid))
 

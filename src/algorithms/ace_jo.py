@@ -256,7 +256,6 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             )
             self.update_gaussians(error_lhs, error_rhs)
 
-
         # Note: for the singular sensors we compute logpdf thresholds for the
         # inference step based on how the errors of the sensors look like at
         # training
@@ -264,12 +263,14 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         self.anomaly_thresholds_rhs = []
         for mean, var in zip(self.mean_lhs, np.diagonal(self.cov_lhs)):
             normdist = norm(loc=mean, scale=np.sqrt(var))
-            self.anomaly_thresholds_lhs.append(-normdist.logpdf(mean + 5 *
-                np.sqrt(var)))
+            self.anomaly_thresholds_lhs.append(
+                -normdist.logpdf(mean + 5 * np.sqrt(var))
+            )
         for mean, var in zip(self.mean_rhs, np.diagonal(self.cov_rhs)):
             normdist = norm(loc=mean, scale=np.sqrt(var))
-            self.anomaly_thresholds_rhs.append(-normdist.logpdf(mean + 5 *
-                np.sqrt(var)))
+            self.anomaly_thresholds_rhs.append(
+                -normdist.logpdf(mean + 5 * np.sqrt(var))
+            )
 
     def update_gaussians(self, error_lhs, error_rhs):
         (self.mean_lhs, self.cov_lhs) = self.update_gaussians_one_side(
@@ -312,7 +313,6 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 mean = mean_new
                 cov = cov_new
         return mean, cov
-
 
     def predict(self, X: pd.DataFrame) -> np.array:
 
