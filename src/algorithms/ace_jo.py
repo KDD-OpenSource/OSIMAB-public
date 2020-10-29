@@ -52,10 +52,8 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         self.latentVideo = latentVideo
         self.error_vects_lhs = []
         self.error_vects_rhs = []
-        self.anomaly_tresholds_lhs = []
-        self.anomaly_tresholds_rhs = []
-        self.anomaly_tresholds_comb_lhs = None
-        self.anomaly_tresholds_comb_rhs = None
+        self.anomaly_thresholds_lhs = []
+        self.anomaly_thresholds_rhs = []
         self.anomaly_values = None
 
         self.encoding_details = {}
@@ -258,6 +256,21 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             )
             self.update_gaussians(error_lhs, error_rhs)
 
+
+        # Note: for the singular sensors we compute logpdf thresholds for the
+        # inference step based on how the errors of the sensors look like at
+        # training
+        self.anomaly_thresholds_lhs = []
+        self.anomaly_thresholds_rhs = []
+        for mean, var in zip(self.mean_lhs, np.diagonal(self.cov_lhs)):
+            normdist = norm(loc=mean, scale=np.sqrt(var))
+            self.anomaly_thresholds_lhs.append(-normdist.logpdf(mean + 5 *
+                np.sqrt(var)))
+        for mean, var in zip(self.mean_rhs, np.diagonal(self.cov_rhs)):
+            normdist = norm(loc=mean, scale=np.sqrt(var))
+            self.anomaly_thresholds_rhs.append(-normdist.logpdf(mean + 5 *
+                np.sqrt(var)))
+
     def update_gaussians(self, error_lhs, error_rhs):
         (self.mean_lhs, self.cov_lhs) = self.update_gaussians_one_side(
             error_lhs, self.mean_lhs, self.cov_lhs
@@ -300,10 +313,6 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 cov = cov_new
         return mean, cov
 
-        self.anomaly_tresholds_lhs = np.random.uniform(low=5, high=10, size=X.shape[1])
-        self.anomaly_tresholds_rhs = np.random.uniform(low=5, high=10, size=X.shape[1])
-        self.anomaly_tresholds_comb_lhs = 1
-        self.anomaly_tresholds_comb_rhs = 1
 
     def predict(self, X: pd.DataFrame) -> np.array:
 
@@ -454,14 +463,14 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 i % self.sequence_length, i : i + self.sequence_length, :
             ] = scoreSensor_rhs
         scoresSensors_rhs = np.nanmean(lattice, axis=0).T
-        anomalyValues_lhs = scoresSensors_lhs.T > self.anomaly_tresholds_lhs
-        anomalyValues_rhs = scoresSensors_rhs.T > self.anomaly_tresholds_rhs
+        anomalyValues_lhs = scoresSensors_lhs.T > self.anomaly_thresholds_lhs
+        anomalyValues_rhs = scoresSensors_rhs.T > self.anomaly_thresholds_rhs
 
         combinedAnomalyValues = np.logical_or(anomalyValues_lhs, anomalyValues_rhs)
         combinedAnomalyValues_Ints = np.zeros(shape=X.shape)
         combinedAnomalyValues_Ints[combinedAnomalyValues == True] = 1
         self.anomaly_values = pd.DataFrame(
-            columns=X.columns, data=combinedAnomalyValues
+            columns=X.columns, data=combinedAnomalyValues_Ints
         )
 
         if self.details:
@@ -589,20 +598,20 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         torch.save(self.aed.state_dict(), os.path.join("./results", "model.pth"))
 
         with open(os.path.join(path, "gaussian_param.npy"), "wb") as f:
-            np.save(f, np.array(self.error_vects_lhs))
-            np.save(f, np.array(self.error_vects_rhs))
-            np.save(f, self.anomaly_tresholds_lhs)
-            np.save(f, self.anomaly_tresholds_rhs)
-            np.save(f, self.anomaly_tresholds_comb_lhs)
-            np.save(f, self.anomaly_tresholds_comb_rhs)
+            np.save(f, self.mean_lhs)
+            np.save(f, self.mean_rhs)
+            np.save(f, self.cov_lhs)
+            np.save(f, self.cov_rhs)
+            np.save(f, self.anomaly_thresholds_lhs)
+            np.save(f, self.anomaly_thresholds_rhs)
 
         with open(os.path.join("./results", "gaussian_param.npy"), "wb") as f:
-            np.save(f, np.array(self.error_vects_lhs))
-            np.save(f, np.array(self.error_vects_rhs))
-            np.save(f, self.anomaly_tresholds_lhs)
-            np.save(f, self.anomaly_tresholds_rhs)
-            np.save(f, self.anomaly_tresholds_comb_lhs)
-            np.save(f, self.anomaly_tresholds_comb_rhs)
+            np.save(f, self.mean_lhs)
+            np.save(f, self.mean_rhs)
+            np.save(f, self.cov_rhs)
+            np.save(f, self.cov_rhs)
+            np.save(f, self.anomaly_thresholds_lhs)
+            np.save(f, self.anomaly_thresholds_rhs)
 
     def load(self, path=None):
         model_details = torch.load(os.path.join("./results", "model_detailed.pth"))
@@ -618,22 +627,22 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         if path:
             self.aed.load_state_dict(torch.load(os.path.join(path, "model.pth")))
             with open(os.path.join(path, "gaussian_param.npy"), "rb") as f:
-                self.error_vects_lhs = list(np.load(f))
-                self.error_vects_rhs = list(np.load(f))
-                self.anomaly_tresholds_lhs = np.load(f)
-                self.anomaly_tresholds_rhs = np.load(f)
-                self.anomaly_tresholds_comb_lhs = np.load(f)
-                self.anomaly_tresholds_comb_rhs = np.load(f)
+                self.mean_lhs = np.load(f)
+                self.mean_rhs = np.load(f)
+                self.cov_lhs = np.load(f)
+                self.cov_rhs = np.load(f)
+                self.anomaly_thresholds_lhs = np.load(f)
+                self.anomaly_thresholds_rhs = np.load(f)
         else:
             self.aed.load_state_dict(torch.load(os.path.join("./results", "model.pth")))
 
             with open(os.path.join("./results", "gaussian_param.npy"), "rb") as f:
-                self.error_vects_lhs = list(np.load(f))
-                self.error_vects_rhs = list(np.load(f))
-                self.anomaly_tresholds_lhs = np.load(f)
-                self.anomaly_tresholds_rhs = np.load(f)
-                self.anomaly_tresholds_comb_lhs = np.load(f)
-                self.anomaly_tresholds_comb_rhs = np.load(f)
+                self.mean_lhs = np.load(f)
+                self.mean_rhs = np.load(f)
+                self.cov_lhs = np.load(f)
+                self.cov_rhs = np.load(f)
+                self.anomaly_thresholds_lhs = np.load(f)
+                self.anomaly_thresholds_rhs = np.load(f)
 
         # checkpoint = torch.load(f)
         # model_state_dict = checkpoint["model_state_dict"]
