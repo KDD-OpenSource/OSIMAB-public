@@ -217,7 +217,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         # error_vectors = []
         # for ts_batch in train_gaussian_loader:
         #    output = self.aed(self.to_var(ts_batch))
-        #    error_lhs = nn.L1Loss(reduce=False)(output[0], self.to_var(ts_batch.float()))
+        #    error_lhs = nn.L1Loss(reduction='none')(output[0], self.to_var(ts_batch.float()))
         #    error_vectors += list(error_lhs.reshape(-1, X.shape[1]).data.cpu().numpy())
         #    #error_vectors += list(error_lhs.view(-1, X.shape[1]).data.cpu().numpy())
 
@@ -230,9 +230,9 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         # for ts_batch in train_gaussian_loader:
         #    output = self.aed(self.to_var(ts_batch), return_latent = True)
         #    # old error did not sum over the latent space for each sensor
-        #    #error_lhs = nn.L1Loss(reduce=False)(output[1], output[2].view((ts_batch.size()[0], -1)).data)
+        #    #error_lhs = nn.L1Loss(reduction='none')(output[1], output[2].view((ts_batch.size()[0], -1)).data)
         #    #new error sums latent space errors for each sensor
-        #    error_lhs = nn.L1Loss(reduce=False)(
+        #    error_lhs = nn.L1Loss(reduction='none')(
         #            output[1].view(output[2].shape), output[2]).sum(axis=2)
         #    error_vectors += list(error_lhs.view(-1, output[2].shape[1]).data.cpu().numpy())
 
@@ -242,15 +242,15 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         # print(f'Cov rhs Errors: {self.cov_rhs}')
         for ts_batch in train_gaussian_loader:
             output = self.aed(self.to_var(ts_batch), return_latent=True)
-            # error_lhs = nn.L1Loss(reduce=False)(output[0],
+            # error_lhs = nn.L1Loss(reduction='none')(output[0],
             # self.to_var(ts_batch.float()))
-            error_lhs = nn.L1Loss(reduce=False)(
+            error_lhs = nn.L1Loss(reduction="none")(
                 output[0], self.to_var(ts_batch.float())
             ).mean(axis=1)
             self.error_vects_lhs += list(
                 error_lhs.reshape(-1, X.shape[1]).data.cpu().numpy()
             )
-            error_rhs = nn.L1Loss(reduce=False)(
+            error_rhs = nn.L1Loss(reduction="none")(
                 output[1].view(output[2].shape), output[2]
             ).mean(axis=2)
             self.error_vects_rhs += list(
@@ -352,14 +352,14 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         errors_rhs = []
         for idx, ts in enumerate(data_loader):
             output = self.aed(self.to_var(ts), return_latent=True)
-            # error_lhs = nn.L1Loss(reduce=False)(output[0],
+            # error_lhs = nn.L1Loss(reduction='none')(output[0],
             # self.to_var(ts.float()))
-            # error_lhs = np.repeat(nn.L1Loss(reduce=False)(
+            # error_lhs = np.repeat(nn.L1Loss(reduction='none')(
             #    output[0],
             #    self.to_var(ts.float())).mean(axis=1).detach().numpy(),
             #    self.sequence_length, axis=0).reshape(ts.size(0),
             #            self.sequence_length, X.shape[1])
-            error_lhs = nn.L1Loss(reduce=False)(
+            error_lhs = nn.L1Loss(reduction="none")(
                 output[0], self.to_var(ts.float())
             ).mean(axis=1)
             scoreSensor_lhs = np.zeros(error_lhs.shape)
@@ -382,7 +382,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
 
             # we spread the error for each sensor over the entire length of 100
             # timesteps
-            error_rhs = nn.L1Loss(reduce=False)(
+            error_rhs = nn.L1Loss(reduction="none")(
                 output[1].view(output[2].shape), output[2]
             ).mean(axis=2)
             scoreSensor_rhs = np.zeros(error_rhs.shape)

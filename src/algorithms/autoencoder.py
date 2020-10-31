@@ -8,7 +8,6 @@ from scipy.stats import multivariate_normal
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 from tqdm import trange
-
 from .algorithm_utils import Algorithm, PyTorchUtils
 from .helpers import make_sequences
 from .helpers import split_sequences
