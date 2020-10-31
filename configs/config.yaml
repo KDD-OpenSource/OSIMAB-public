@@ -1,7 +1,9 @@
 
-ctx:                            'testNoTF_Warning'
+ctx:                            'CodeTest'
 
 epoch:                          1
+
+isTraining:                     True
 
 ace:
     seq_len:                    100
@@ -12,7 +14,6 @@ ace:
     LR:                         0.001
     sensor_spec_loss:           True
     corr_loss:                  True
-    num_error_vects:            Null
     warm_start:                 False
 
 testSize:                       30000
