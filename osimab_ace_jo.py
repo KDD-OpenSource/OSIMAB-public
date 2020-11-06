@@ -51,8 +51,7 @@ def evaluate_osimab_jo():
         pathnames = []
         for regexp_bin in cfg.dataset.regexp_bin_train:
             pathnamesRegExp = os.path.join(cfg.dataset.data_dir, regexp_bin)
-            pathnames.append(glob.glob(pathnamesRegExp))
-        pathnames = [path for paths in pathnames for path in paths]
+            pathnames += glob.glob(pathnamesRegExp)
         filenames = [os.path.basename(pathname) for pathname in pathnames]
         print("Used binfiles:")
         pprint(filenames)
