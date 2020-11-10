@@ -188,9 +188,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
 
         if self.compute_corr_loss:
             loss2 += torch.mean(
-                self.corr_loss(
-                    output[1], output[2].view((ts_batch.size()[0], -1)).data
-                )
+                self.corr_loss(output[1], output[2].view((ts_batch.size()[0], -1)).data)
             )
         return loss1, loss2
 
@@ -397,9 +395,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         return scores_lhs + scores_rhs
 
     def set_gaussians(self):
-        mvnormal = multivariate_normal(
-            self.mean_lhs, self.cov_lhs, allow_singular=True
-        )
+        mvnormal = multivariate_normal(self.mean_lhs, self.cov_lhs, allow_singular=True)
         mvnormal_rhs = multivariate_normal(
             self.mean_rhs, self.cov_rhs, allow_singular=True
         )
@@ -435,9 +431,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         scoreSensors_lhs = []
         for sensorInd in range(self.input_size):
             scoreSensors_lhs.append(
-                -sensorNormals_lhs[sensorInd].logpdf(
-                    error_lhs[:, sensorInd].data.cpu()
-                )
+                -sensorNormals_lhs[sensorInd].logpdf(error_lhs[:, sensorInd].data.cpu())
             )
             scoreSensors_lhs[-1] = np.repeat(
                 scoreSensors_lhs[-1], self.sequence_length
@@ -454,9 +448,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         scoreSensors_rhs = []
         for sensorInd in range(self.input_size):
             scoreSensors_rhs.append(
-                -sensorNormals_lhs[sensorInd].logpdf(
-                    error_lhs[:, sensorInd].data.cpu()
-                )
+                -sensorNormals_lhs[sensorInd].logpdf(error_lhs[:, sensorInd].data.cpu())
             )
             scoreSensors_rhs[-1] = np.repeat(
                 scoreSensors_rhs[-1], self.sequence_length
@@ -484,16 +476,12 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         lattice_sensors_lhs = np.full(
             (self.sequence_length, X.shape[0], X.shape[1]), np.nan
         )
-        scoresSensors_lhs = self.calc_lattice(
-            X, scoresSensors_lhs, lattice_sensors_lhs
-        )
+        scoresSensors_lhs = self.calc_lattice(X, scoresSensors_lhs, lattice_sensors_lhs)
 
         lattice_sensors_rhs = np.full(
             (self.sequence_length, X.shape[0], X.shape[1]), np.nan
         )
-        scoresSensors_rhs = self.calc_lattice(
-            X, scoresSensors_rhs, lattice_sensors_rhs
-        )
+        scoresSensors_rhs = self.calc_lattice(X, scoresSensors_rhs, lattice_sensors_rhs)
 
         return scores_lhs, scores_rhs, scoresSensors_lhs, scoresSensors_rhs
 
@@ -585,9 +573,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 self.anomaly_thresholds_lhs = np.load(f)
                 self.anomaly_thresholds_rhs = np.load(f)
         else:
-            self.aed.load_state_dict(
-                torch.load(os.path.join("./results", "model.pth"))
-            )
+            self.aed.load_state_dict(torch.load(os.path.join("./results", "model.pth")))
 
             with open(os.path.join("./results", "gaussian_param.npy"), "rb") as f:
                 self.mean_lhs = np.load(f)
@@ -701,9 +687,9 @@ class ACEModule(nn.Module, PyTorchUtils):
         # creates powers of two between eight and the next smaller power from the input_length
         dec_steps = (
             2
-            ** np.arange(
-                max(np.ceil(np.log2(hidden_size1)), 2), np.log2(input_length)
-            )[1:]
+            ** np.arange(max(np.ceil(np.log2(hidden_size1)), 2), np.log2(input_length))[
+                1:
+            ]
         )
         dec_setup = np.concatenate(
             [[hidden_size1], dec_steps.repeat(2), [input_length]]
@@ -741,9 +727,9 @@ class ACEModule(nn.Module, PyTorchUtils):
         # creates powers of two between eight and the next smaller power from the input_length
         dec_steps = (
             2
-            ** np.arange(
-                max(np.ceil(np.log2(hidden_size2)), 2), np.log2(input_length)
-            )[1:]
+            ** np.arange(max(np.ceil(np.log2(hidden_size2)), 2), np.log2(input_length))[
+                1:
+            ]
         )
         dec_setup = np.concatenate(
             [[hidden_size2], dec_steps.repeat(2), [input_length]]

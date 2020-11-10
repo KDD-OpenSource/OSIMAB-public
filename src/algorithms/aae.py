@@ -51,9 +51,7 @@ class AdversarialAutoEncoder(Algorithm, PyTorchUtils):
 
     def fit(self, X: pd.DataFrame):
         sequences = make_sequences(data=X, sequence_length=self.sequence_length)
-        seq_train, seq_test = split_sequences(
-            sequences, self.train_gaussian_percentage
-        )
+        seq_train, seq_test = split_sequences(sequences, self.train_gaussian_percentage)
         train_loader = DataLoader(
             dataset=seq_train,
             batch_size=self.batch_size,
@@ -226,9 +224,7 @@ class AutoEncoderModule(nn.Module, PyTorchUtils):
                 1:
             ]
         )
-        dec_setup = np.concatenate(
-            [[hidden_size], dec_steps.repeat(2), [input_length]]
-        )
+        dec_setup = np.concatenate([[hidden_size], dec_steps.repeat(2), [input_length]])
         enc_setup = dec_setup[::-1]
 
         layers = np.array(
@@ -280,9 +276,7 @@ class EncoderModule(nn.Module, PyTorchUtils):
                 1:
             ]
         )
-        dec_setup = np.concatenate(
-            [[hidden_size], dec_steps.repeat(2), [input_length]]
-        )
+        dec_setup = np.concatenate([[hidden_size], dec_steps.repeat(2), [input_length]])
         enc_setup = dec_setup[::-1]
 
         layers = np.array(
@@ -321,9 +315,7 @@ class DecoderModule(nn.Module, PyTorchUtils):
                 1:
             ]
         )
-        dec_setup = np.concatenate(
-            [[hidden_size], dec_steps.repeat(2), [input_length]]
-        )
+        dec_setup = np.concatenate([[hidden_size], dec_steps.repeat(2), [input_length]])
 
         layers = np.array(
             [

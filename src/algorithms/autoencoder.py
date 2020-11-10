@@ -220,9 +220,7 @@ class AutoEncoderModule(nn.Module, PyTorchUtils):
                 1:
             ]
         )
-        dec_setup = np.concatenate(
-            [[hidden_size], dec_steps.repeat(2), [input_length]]
-        )
+        dec_setup = np.concatenate([[hidden_size], dec_steps.repeat(2), [input_length]])
         enc_setup = dec_setup[::-1]
 
         layers = np.array(

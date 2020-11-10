@@ -162,9 +162,7 @@ def get_datasets_for_multiple_runs(anomaly_type, seeds, steps, outlier_type):
     for seed in seeds:
         if anomaly_type == "extreme":
             yield [
-                SyntheticDataGenerator.get(
-                    f"{outlier_type}_extremeness", seed, extreme
-                )
+                SyntheticDataGenerator.get(f"{outlier_type}_extremeness", seed, extreme)
                 for extreme in np.logspace(4, -5, num=steps, base=2)
             ]
         elif anomaly_type == "missing":

@@ -49,7 +49,9 @@ class DAGMM(Algorithm, PyTorchUtils):
         self.batch_size = batch_size
         self.sequence_length = sequence_length
         self.gmm_k = gmm_k  # Number of Gaussian mixtures
-        self.normal_percentile = normal_percentile  # Up to which percentile data should be considered normal
+        self.normal_percentile = (
+            normal_percentile  # Up to which percentile data should be considered normal
+        )
         self.autoencoder_type = autoencoder_type
         if autoencoder_type == AutoEncoderModule:
             self.autoencoder_args = {"sequence_length": self.sequence_length}

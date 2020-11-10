@@ -766,9 +766,7 @@ class Evaluator:
         if len(datasets) > 2:
             fig.tight_layout()
         if store:
-            evaluators[0].store(
-                fig, "heatmap", no_counters=True, store_in_figures=True
-            )
+            evaluators[0].store(fig, "heatmap", no_counters=True, store_in_figures=True)
         return fig
 
     def plot_single_heatmap(self, store=True):
