@@ -153,7 +153,9 @@ class RecurrentEBM(Algorithm, TensorflowUtils):
         u_t = tf.scan(rnn_recurrence, self.input_data, initializer=self.u0)
         # Scan through the rnn and generate the visible and hidden biases for each RBM in the batch
         self.BX_t = tf.reshape(
-            tf.scan(visible_bias_recurrence, u_t, tf.zeros([1, n_visible], tf.float32)),
+            tf.scan(
+                visible_bias_recurrence, u_t, tf.zeros([1, n_visible], tf.float32)
+            ),
             [n_visible, self._batch_size],
         )
         self.BH_t = tf.reshape(

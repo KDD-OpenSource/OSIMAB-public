@@ -136,7 +136,10 @@ class SyntheticDataGenerator:
         dim = np.random.choice(n, len(timestamps))
         outlier_config = {
             "extreme": [
-                {"n": i, "timestamps": [ts for d, ts in zip(dim, timestamps) if d == i]}
+                {
+                    "n": i,
+                    "timestamps": [ts for d, ts in zip(dim, timestamps) if d == i],
+                }
                 for i in range(n)
             ]
         }
@@ -181,7 +184,10 @@ class SyntheticDataGenerator:
         dim = np.random.choice(n, len(timestamps))
         pollution_config = {
             "extreme": [
-                {"n": i, "timestamps": [ts for d, ts in zip(dim, timestamps) if d == i]}
+                {
+                    "n": i,
+                    "timestamps": [ts for d, ts in zip(dim, timestamps) if d == i],
+                }
                 for i in range(n)
             ]
         }
@@ -225,7 +231,10 @@ class SyntheticDataGenerator:
         dim = np.random.choice(n, len(timestamps))
         outlier_config = {
             "shift": [
-                {"n": i, "timestamps": [ts for d, ts in zip(dim, timestamps) if d == i]}
+                {
+                    "n": i,
+                    "timestamps": [ts for d, ts in zip(dim, timestamps) if d == i],
+                }
                 for i in range(n)
             ]
         }
@@ -271,7 +280,10 @@ class SyntheticDataGenerator:
         dim = np.random.choice(n, len(timestamps))
         pollution_config = {
             "shift": [
-                {"n": i, "timestamps": [ts for d, ts in zip(dim, timestamps) if d == i]}
+                {
+                    "n": i,
+                    "timestamps": [ts for d, ts in zip(dim, timestamps) if d == i],
+                }
                 for i in range(n)
             ]
         }
@@ -307,7 +319,10 @@ class SyntheticDataGenerator:
         dim = np.random.choice(n, len(timestamps))
         outlier_config = {
             "variance": [
-                {"n": i, "timestamps": [ts for d, ts in zip(dim, timestamps) if d == i]}
+                {
+                    "n": i,
+                    "timestamps": [ts for d, ts in zip(dim, timestamps) if d == i],
+                }
                 for i in range(n)
             ]
         }
@@ -355,7 +370,10 @@ class SyntheticDataGenerator:
         dim = np.random.choice(n, len(timestamps))
         pollution_config = {
             "variance": [
-                {"n": i, "timestamps": [ts for d, ts in zip(dim, timestamps) if d == i]}
+                {
+                    "n": i,
+                    "timestamps": [ts for d, ts in zip(dim, timestamps) if d == i],
+                }
                 for i in range(n)
             ]
         }
@@ -390,7 +408,10 @@ class SyntheticDataGenerator:
         dim = np.random.choice(n, len(timestamps))
         outlier_config = {
             "trend": [
-                {"n": i, "timestamps": [ts for d, ts in zip(dim, timestamps) if d == i]}
+                {
+                    "n": i,
+                    "timestamps": [ts for d, ts in zip(dim, timestamps) if d == i],
+                }
                 for i in range(n)
             ]
         }
@@ -436,7 +457,10 @@ class SyntheticDataGenerator:
         dim = np.random.choice(n, len(timestamps))
         pollution_config = {
             "trend": [
-                {"n": i, "timestamps": [ts for d, ts in zip(dim, timestamps) if d == i]}
+                {
+                    "n": i,
+                    "timestamps": [ts for d, ts in zip(dim, timestamps) if d == i],
+                }
                 for i in range(n)
             ]
         }
@@ -575,7 +599,9 @@ class SyntheticDataGenerator:
         baseline_config = {}
 
         indices = range(0, n + 1, n // 4)
-        outl_chunks = [np.arange(j, indices[i + 1]) for i, j in enumerate(indices[:-1])]
+        outl_chunks = [
+            np.arange(j, indices[i + 1]) for i, j in enumerate(indices[:-1])
+        ]
         timestamps_ext = [
             (2192,),
             (2212,),

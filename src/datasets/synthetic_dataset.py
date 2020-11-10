@@ -34,7 +34,9 @@ class SyntheticDataset(Dataset):
         self.behavior_config = behavior_config if behavior_config is not None else {}
         self.baseline_config = baseline_config if baseline_config is not None else {}
         self.outlier_config = outlier_config if outlier_config is not None else {}
-        self.pollution_config = pollution_config if pollution_config is not None else {}
+        self.pollution_config = (
+            pollution_config if pollution_config is not None else {}
+        )
         self.label_config = label_config
         self.train_split = train_split
         np.random.seed(random_state)

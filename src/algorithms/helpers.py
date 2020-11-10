@@ -44,7 +44,9 @@ def make_sequences(data, sequence_length, stride=1):
 
 def split_sequences(sequences, percentage):
     if percentage > 1 or percentage < 0:
-        raise ValueError("percentage must be within [0,1]," "was {}".format(percentage))
+        raise ValueError(
+            "percentage must be within [0,1]," "was {}".format(percentage)
+        )
     indices = np.random.permutation(len(sequences))
     split_point = int(len(sequences) * percentage)
     seq1 = sequences[indices[:split_point]]
