@@ -44,6 +44,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         self.sensor_specific = sensor_specific
         self.compute_corr_loss = corr_loss
         self.input_size = None
+        self.sensor_list = None
         self.hidden_size1 = hidden_size1
         self.hidden_size2 = hidden_size2
         self.sequence_length = sequence_length
@@ -127,6 +128,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         )
 
         self.input_size = X.shape[1]
+        self.sensor_list = list(X.columns)
         if self.aed == None:
             self.aed = ACEModule(
                 self.input_size,
@@ -327,6 +329,8 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         data = X.values
         range_ = data.shape[0] - self.sequence_length + 1
         sequences = [data[i : i + self.sequence_length] for i in range(range_)]
+        if list(X.columns) != self.sensor_list:
+            raise Exception("you predict on other models than you trained on")
         data_loader = DataLoader(
             dataset=sequences,
             batch_size=self.batch_size,
@@ -570,6 +574,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 "mean": self.mean_lhs,
                 "cov": self.cov_lhs,
                 "input_size": self.input_size,
+                "sensor_list": self.sensor_list,
                 "sequence_length": self.sequence_length,
                 "hidden_size1": self.hidden_size1,
                 "hidden_size2": self.hidden_size2,
@@ -585,6 +590,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 "mean": self.mean_lhs,
                 "cov": self.cov_lhs,
                 "input_size": self.input_size,
+                "sensor_list": self.sensor_list,
                 "sequence_length": self.sequence_length,
                 "hidden_size1": self.hidden_size1,
                 "hidden_size2": self.hidden_size2,
