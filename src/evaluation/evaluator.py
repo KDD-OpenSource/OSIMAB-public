@@ -482,7 +482,7 @@ class Evaluator:
             if key == "scores_lhs" or key == "scores_rhs":
                 # Todo: replace by command to just skip the current iterantion
                 # of the for-loop
-                break
+                continue
             axes[i].set_title(key)
             max_val = np.max(np.max(values))
             min_val = np.min(np.min(values))
