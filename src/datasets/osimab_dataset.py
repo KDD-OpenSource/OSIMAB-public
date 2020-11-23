@@ -24,37 +24,7 @@ class OSIMABDataset(RealDataset):
     def load(self):
         (a, b), (c, d) = self.get_data_osimab(test_len=self.cfg.testSize)
         self._data = (a, b, c, d)
-        # if self.cfg.dataset.impute_anomaly:
-        #    (a, b), (c, d) = self.get_data_osimab_with_anomaly(
-        #        test_len=self.cfg.testSize
-        #    )
-        # else:
-        #    (a, b), (c, d) = self.get_data_osimab(test_len=self.cfg.testSize)
-        # self._data = (a, b, c, d)
 
-    # def get_data_osimab(self, test_len):
-    #    # must be replaced by the procedure of reading the zip file and
-    #    df = catman_to_df(self.processed_path)[0]
-    #    df = filterSensors(df, self.cfg.dataset.regexp_sensor)
-    #    n_train = int(df.shape[0] * self.cfg.ace.train_per)
-    #    train = df.iloc[:n_train]
-    #    # take a random index
-    #    # rand_idx = random.randint(n_train, df.shape[0]-1-test_len)
-    #    # take the last indices
-    #    rand_idx = df.shape[0] - 1 - test_len
-    #    test = df.iloc[rand_idx : rand_idx + test_len]
-
-    #    scaler = StandardScaler()
-    #    scaler.fit(df)
-    #    train = standardize(train, scaler)
-    #    test = standardize(test, scaler)
-
-    #    train_label = pd.Series(np.zeros(train.shape[0]))
-    #    test_label = pd.Series(np.zeros(test.shape[0]))
-
-    #    return (train, train_label), (test, test_label)
-
-    # def get_data_osimab_with_anomaly(self, test_len):
     def get_data_osimab(self, test_len):
         # must be replaced by the procedure of reading the zip file and
         df = catman_to_df(self.processed_path)[0]
@@ -82,70 +52,54 @@ class OSIMABDataset(RealDataset):
                 anomaly_list.extend(np.repeat(item[0], item[1]))
 
             dur = int(test.shape[0] / (2 * num_anomalies))
-            # num_channels = df.shape[1]
             idxs = int((test.shape[0] - dur) / dur)
-            # idxs = np.random.choice(idxs, max(1 * num_channels, 5))
             idxs = np.random.choice(idxs, num_anomalies)
             idxs = idxs * dur
+            channels = []
+            num_channels = test.shape[1]
+            for anomaly in anomaly_list:
+                channels.append(np.random.choice(num_channels, 1)[0])
 
-            # for idx in idxs:
-            for idx, anomaly in zip(idxs, anomaly_list):
-                test, test_label = impute_anomaly(test, test_label, dur, idx, anomaly)
-            # for
-
-        #                channel = np.random.choice(num_channels, 1)[0]
-        #                # tmp = test.iloc[dur*idx:dur*(idx+1),channel]
-        #                tmp = test.iloc[idx : idx + dur, channel]
-        #                # tmp = tmp.shift(periods=np.random.choice(100,1)[0]+1, fill_value=np.mean(tmp))
-        #                tmp = tmp.shift(int(dur / 2), fill_value=np.mean(tmp) + 2)
-        #                # test.iloc[dur*idx:dur*(idx+1),channel] = tmp
-        #                test.iloc[idx : idx + dur, channel] = tmp
-        #                # test_label.iloc[dur*idx:dur*(idx+1)] = 1
-        #                test_label.iloc[idx : idx + dur] = 1
+            for idx, anomaly, channel in zip(idxs, anomaly_list, channels):
+                test, test_label = impute_anomaly(test, test_label, dur, idx,
+                        anomaly, channel)
 
         # after (optionally) imputing anomalies we rescale the dataset
         test = pd.DataFrame(scaler.transform(test), columns=test.columns)
         return (train, train_label), (test, test_label)
 
 
-def impute_anomaly(test, test_label, dur, idx, anomaly):
+def impute_anomaly(test, test_label, dur, idx, anomaly, channel):
     pd.options.mode.chained_assignment = None
     num_channels = test.shape[1]
-    if anomaly == "shift":
-        channels = np.random.choice(num_channels, int(num_channels / 2))
-        for channel in channels:
-            tmp = test.iloc[idx : idx + dur, channel]
-            tmp = tmp + 2
-            test.iloc[idx : idx + dur, channel] = tmp
-            test_label.iloc[idx : idx + dur] = 1
+    if anomaly == "nullSensor":
+        test.iloc[:,channel] = 0
+        test_label.iloc[:] = 1
+    elif anomaly == "shift":
+        tmp = test.iloc[idx : idx + dur, channel]
+        tmp = tmp + 4
+        test.iloc[idx : idx + dur, channel] = tmp
+        test_label.iloc[idx : idx + dur] = 1
     elif anomaly == "variance":
-        channels = np.random.choice(num_channels, int(num_channels / 2))
-        for channel in channels:
-            tmp = test.iloc[idx : idx + dur, channel]
-            tmp = tmp * 2
-            test.iloc[idx : idx + dur, channel] = tmp
-            test_label.iloc[idx : idx + dur] = 1
+        tmp = test.iloc[idx : idx + dur, channel]
+        tmp = tmp * 3
+        test.iloc[idx : idx + dur, channel] = tmp
+        test_label.iloc[idx : idx + dur] = 1
     elif anomaly == "peak":
-        channels = np.random.choice(num_channels, int(num_channels / 2))
-        for channel in channels:
-            tmp = test.iloc[idx : idx + int(dur / 10), channel]
-            tmp = tmp + 10
-            test.iloc[idx : idx + int(dur / 10), channel] = tmp
-            test_label.iloc[idx : idx + int(dur / 10)] = 1
+        tmp = test.iloc[idx : idx + 3, channel]
+        tmp = tmp + 12
+        test.iloc[idx : idx + 3, channel] = tmp
+        test_label.iloc[idx : idx + 3] = 1
     elif anomaly == "timeshift":
-        channels = np.random.choice(num_channels, int(num_channels / 2))
-        for channel in channels:
-            tmp = test.iloc[idx : idx + dur, channel]
-            tmp = tmp.shift(int(dur / 2), fill_value=np.mean(tmp) + 2)
-            test.iloc[idx : idx + dur, channel] = tmp
-            test_label.iloc[idx : idx + dur] = 1
+        tmp = test.iloc[idx : idx + dur, channel]
+        tmp = tmp.shift(int(dur / 2), fill_value=np.mean(tmp) + 2)
+        test.iloc[idx : idx + dur, channel] = tmp
+        test_label.iloc[idx : idx + dur] = 1
     elif anomaly == "trend":
-        channels = np.random.choice(num_channels, int(num_channels / 2))
-        for channel in channels:
-            tmp = test.iloc[idx : idx + dur, channel]
-            tmp = tmp + np.linspace(0, 3, tmp.shape[0])
-            test.iloc[idx : idx + dur, channel] = tmp
-            test_label.iloc[idx : idx + dur] = 1
+        tmp = test.iloc[idx : idx + dur, channel]
+        tmp = tmp + np.linspace(0, 3, tmp.shape[0])
+        test.iloc[idx : idx + dur, channel] = tmp
+        test_label.iloc[idx : idx + dur] = 1
     else:
         raise Exception("Unknown Anomaly Type")
     pd.options.mode.chained_assignment = "warn"
