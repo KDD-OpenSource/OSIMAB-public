@@ -330,7 +330,11 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         range_ = data.shape[0] - self.sequence_length + 1
         sequences = [data[i : i + self.sequence_length] for i in range(range_)]
         if list(X.columns) != self.sensor_list:
-            raise Exception("you predict on other models than you trained on")
+            raise ValueError(
+                "You predict on other attributes than you trained on.\n"
+                f"The model was trained using attributes {self.sensor_list}"
+                f"The prediction data contains attributes {list(X.columns)}"
+            )
         data_loader = DataLoader(
             dataset=sequences,
             batch_size=self.batch_size,
