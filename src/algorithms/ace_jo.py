@@ -44,6 +44,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         self.sensor_specific = sensor_specific
         self.compute_corr_loss = corr_loss
         self.input_size = None
+        self.sensor_list = None
         self.hidden_size1 = hidden_size1
         self.hidden_size2 = hidden_size2
         self.sequence_length = sequence_length
@@ -117,8 +118,11 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         )
         return train_ace_loader, train_gaussian_loader
 
-    def set_ace_module(self, X: pd.DataFrame):
+
+    def set_ace_module(self, X: pd.DataFrame):        
         if self.aed == None:
+            self.input_size = X.shape[1]
+            self.sensor_list = list(X.columns)
             self.aed = ACEModule(
                 self.input_size,
                 self.sequence_length,
@@ -133,6 +137,12 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 "You cannot continue training the autoencoder,"
                 "because the autoencoders structure does not match the"
                 "structuro of the data."
+            )
+        elif list(X.columns) != self.sensor_list:
+            raise ValueError(
+                "You predict on other attributes than you trained on.\n"
+                f"The model was trained using attributes {self.sensor_list}"
+                f"The prediction data contains attributes {list(X.columns)}"
             )
 
     def train_ace(self, train_ace_loader, optimizer):
@@ -293,6 +303,12 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
     def predict(self, X: pd.DataFrame) -> np.array:
         self.aed.eval()
         X, sequences = self.data_preprocessing(X)
+        if list(X.columns) != self.sensor_list:
+            raise ValueError(
+                "You predict on other attributes than you trained on.\n"
+                f"The model was trained using attributes {self.sensor_list}"
+                f"The prediction data contains attributes {list(X.columns)}"
+            )
         data_loader = DataLoader(
             dataset=sequences,
             batch_size=self.batch_size,
@@ -532,6 +548,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 "mean": self.mean_lhs,
                 "cov": self.cov_lhs,
                 "input_size": self.input_size,
+                "sensor_list": self.sensor_list,
                 "sequence_length": self.sequence_length,
                 "hidden_size1": self.hidden_size1,
                 "hidden_size2": self.hidden_size2,
@@ -547,6 +564,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 "mean": self.mean_lhs,
                 "cov": self.cov_lhs,
                 "input_size": self.input_size,
+                "sensor_list": self.sensor_list,
                 "sequence_length": self.sequence_length,
                 "hidden_size1": self.hidden_size1,
                 "hidden_size2": self.hidden_size2,
