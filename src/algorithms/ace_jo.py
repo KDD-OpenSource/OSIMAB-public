@@ -139,6 +139,8 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         self.aed.train()
         alpha, beta = self.initTradeoff()
         for epoch in trange(self.num_epochs):
+            print(f"Alpha: {alpha}")
+            print(f"Beta: {beta}")
             epochLossLhs = 0
             epochLossRhs = 0
             latentSpace = []
@@ -152,7 +154,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 epochLossRhs += loss2
                 (alpha * loss1 + beta * loss2).backward()
                 optimizer.step()
-            alpha, beta = self.updateTradeoff(alpha, beta, epoch+1)
+            alpha, beta = self.updateTradeoff(alpha, beta, epoch + 1)
             latentSpace = np.vstack(
                 list(map(lambda x: x.detach().numpy(), latentSpace))
             )
@@ -197,7 +199,10 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         sqr_err = error ** 2
         sum_sqr_err = sqr_err.sum(1)
         root_sum_sqr_err = torch.sqrt(sum_sqr_err)
+        sqr_sum_sqr_err = sum_sqr_err ** 2
         return root_sum_sqr_err
+        # return sqr_sum_sqr_err
+        # return sum_sqr_err
 
     def corr_loss(self, yhat, y):
         subclassLength = self.hidden_size1
@@ -360,6 +365,23 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         )
 
         if self.details:
+            self.prediction_details.update(
+                {"anomaly_values": self.anomaly_values.values.T}
+            )
+            self.prediction_details.update(
+                {
+                    "anomaly_values_lhs": (
+                        scoresSensors_lhs.T > self.anomaly_thresholds_lhs
+                    ).T
+                }
+            )
+            self.prediction_details.update(
+                {
+                    "anomaly_values_rhs": (
+                        scoresSensors_lhs.T > self.anomaly_thresholds_rhs
+                    ).T
+                }
+            )
             self.prediction_details.update({"scoresSensors_lhs": scoresSensors_lhs})
             self.prediction_details.update({"scoresSensors_rhs": scoresSensors_rhs})
             self.prediction_details.update({"scores_lhs": scores_lhs})
