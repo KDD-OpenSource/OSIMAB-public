@@ -152,7 +152,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 epochLossRhs += loss2
                 (alpha * loss1 + beta * loss2).backward()
                 optimizer.step()
-            alpha, beta = self.updateTradeoff(alpha, beta, epoch)
+            alpha, beta = self.updateTradeoff(alpha, beta, epoch+1)
             latentSpace = np.vstack(
                 list(map(lambda x: x.detach().numpy(), latentSpace))
             )
@@ -160,15 +160,12 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
 
     def initTradeoff(self):
         alpha = 1
-        beta = 1e-3
-        # beta = 0
+        beta = 0
         return alpha, beta
 
     def updateTradeoff(self, alpha, beta, epoch):
-        # alpha/=2
-        # beta*=2
-        alpha = 1 - epoch / self.num_epochs
-        beta = epoch / self.num_epochs
+        alpha = 1 - epoch / (self.num_epochs-1)
+        beta = epoch / (self.num_epochs-1)
         return alpha, beta
 
     def calcLosses(self, ts_batch, output):
@@ -204,8 +201,6 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
 
     def corr_loss(self, yhat, y):
         subclassLength = self.hidden_size1
-        yhat = yhat.view((-1, subclassLength))
-        y = y.view((-1, subclassLength))
         vhat = yhat - torch.mean(yhat, 0)
         vy = y - torch.mean(y, 0)
         cost = torch.sum(vhat * vy, 1)
@@ -260,7 +255,11 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             cov = np.cov(errors, rowvar=False)
         else:
             localErrorCount = 0
-            cov_dim = cov.shape[0]
+            try:
+                cov_dim = cov.shape[0]
+            except:
+                cov = cov[np.newaxis][np.newaxis]
+                cov_dim = cov.shape[0]
             summedcov_new = np.empty(shape=(cov.shape))
             for error in errors:
                 # Mean Calculation
@@ -414,6 +413,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         error_rhs = nn.L1Loss(reduction="none")(
             output[1].view(output[2].shape), output[2]
         ).mean(axis=2)
+
         return error_lhs, error_rhs
 
     def calc_score(
