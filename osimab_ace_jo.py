@@ -42,12 +42,13 @@ def main():
 
 
 def evaluate_osimab_jo():
-    seed = 42
+    seed = np.random.randint(1000)
     cfgs = []
     for file_name in os.listdir("./configs"):
         if file_name.endswith(".yaml"):
             cfgs.append(config(external_path=os.path.join("./configs/", file_name)))
     for cfg in cfgs:
+        # Load data
         pathnames = []
         for regexp_bin in cfg.dataset.regexp_bin_train:
             pathnamesRegExp = os.path.join(cfg.dataset.data_dir, regexp_bin)
@@ -56,7 +57,18 @@ def evaluate_osimab_jo():
         print("Used binfiles:")
         pprint(filenames)
         datasets = [OSIMABDataset(cfg, file_name=filename) for filename in pathnames]
-        evaluator = Evaluator(datasets, detectors, seed=seed, cfg=cfg)
+
+        # Load or train model
+        model = detectors(np.random.randint(1000), cfg)[0]
+        if cfg.ace.load_file is not None:
+            model.load(cfg.ace.load_file)
+        else:
+            X_train = datasets[0].data()[0]
+            model.fit(X_train)
+
+        # Evaluate model
+        dets = [model]
+        evaluator = Evaluator(datasets, dets, seed=seed, cfg=cfg)
         evaluator.evaluate()
         result = evaluator.benchmarks()
         evaluator.plot_roc_curves()
