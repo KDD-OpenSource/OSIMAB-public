@@ -169,13 +169,6 @@ class Evaluator:
             for ds in progressbar.progressbar(self.datasets):
                 (X_train, y_train, X_test, y_test) = ds.data()
                 self.logger.info(
-                    f"Training {det.name} on {ds.name} with seed {self.seed}"
-                )
-                ds._data = None
-                gc.collect()
-            for ds in progressbar.progressbar(self.datasets):
-                (X_train, y_train, X_test, y_test) = ds.data()
-                self.logger.info(
                     f"Testing {det.name} on {ds.name} with seed {self.seed}"
                 )
                 try:
