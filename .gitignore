@@ -113,3 +113,6 @@ data/
 reports/
 models/
 tmp/
+
+*.npy
+*.pth

@@ -1,7 +1,10 @@
 
-ctx:                            'TestPredAnomalousValues'
+#ctx:                            'NoCorr_Loss_SameError_Loss_MSE_SensorSpec_noPeak'
+ctx:                            'MultipleSG_NoAnomalies_TrainRHStoo_summedrhs_linear_tradeoff'
 
-epoch:                          1
+epoch:                          20
+
+isTraining:                     True
 
 ace:
     seq_len:                    100
@@ -15,14 +18,20 @@ ace:
     num_error_vects:            Null
     load_file:                  Null
 
-testSize:                       30000
+testSize:                       10000
 
 dataset:
     #regexp_bin:                 ['OSIMAB_2020_06_26_0[2]*.zip']
     data_dir:                   '/osimab/data/itc-prod2.com/'
     regexp_bin_train:           ['OSIMAB_2020_08_20_0[2-4]*.zip', 'OSIMAB_2020_08_21_0[2-4]*.zip']
     regexp_bin_test:            ['OSIMAB_2020_08_20_0[2]*.zip']
-    regexp_sensor:              ['N.*_F3.*INC.*']
+    regexp_sensor:              ['N.*_F3.*SG_2_N.*', 'N.*_F3.*SG_2_SO.*']
     #regexp_sensor:              ['.*']
-    impute_anomaly:             True
-
+    #impute_anomaly:             True
+    anomalies:                  #Null
+        nullSensor:             1
+    #        shift:                  1
+    #        variance:               1
+    #        peak:                   1
+    #        timeshift:              0
+    #        trend:                  0

@@ -8,7 +8,6 @@ from scipy.stats import multivariate_normal
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 from tqdm import trange
-
 from .algorithm_utils import Algorithm, PyTorchUtils
 from .helpers import make_sequences
 from .helpers import split_sequences
@@ -72,7 +71,10 @@ class AutoEncoder(Algorithm, PyTorchUtils):
             pin_memory=True,
         )
         train_gaussian_loader = DataLoader(
-            dataset=seq_val, batch_size=self.batch_size, drop_last=True, pin_memory=True
+            dataset=seq_val,
+            batch_size=self.batch_size,
+            drop_last=True,
+            pin_memory=True,
         )
 
         self.input_size = sequences.shape[2]

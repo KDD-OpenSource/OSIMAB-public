@@ -59,7 +59,10 @@ class AdversarialAutoEncoder(Algorithm, PyTorchUtils):
             pin_memory=True,
         )
         train_gaussian_loader = DataLoader(
-            dataset=seq_val, batch_size=self.batch_size, drop_last=True, pin_memory=True
+            dataset=seq_val,
+            batch_size=self.batch_size,
+            drop_last=True,
+            pin_memory=True,
         )
 
         self.aed = AutoEncoderModule(

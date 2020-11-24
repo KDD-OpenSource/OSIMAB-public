@@ -4,9 +4,11 @@ import os
 import pickle
 import re
 import sys
+
+sys.path.append("../../")
 import traceback
 from textwrap import wrap
-
+from src.algorithms import AutoEncoderJO
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as path_effects
 from matplotlib.font_manager import FontProperties
@@ -191,6 +193,23 @@ class Evaluator:
                     self.results[(ds.name, det.name)] = np.zeros_like(y_test)
                 ds._data = None
                 gc.collect()
+            # import pdb; pdb.set_trace()
+            # det.save("results/tmp")
+            # det_ = AutoEncoderJO(
+            #     num_epochs=1,
+            #     hidden_size1=5,
+            #     hidden_size2=5,
+            #     lr=0.001,
+            #     sequence_length=100,
+            #     latentVideo=False,
+            #     train_max=1,
+            #     sensor_specific=True,
+            #     corr_loss=True,
+            #     num_error_vects=None,
+            #     seed=2,
+            # )
+            # # import pdb; pdb.set_trace()
+            # det_.load("results/tmp")
 
     def benchmarks(self) -> pd.DataFrame:
         df = pd.DataFrame()
@@ -397,7 +416,7 @@ class Evaluator:
         for value in det.prediction_details.values():
             grid += 1 if value.ndim == 1 else value.shape[0]
         grid += X_test.shape[1]  # data
-        grid += 1 + 1  # score and gt
+        grid += 1 + 1 + 1  # score, gt and prediction
 
         fig, axes = plt.subplots(grid, 1, figsize=(15, 1.5 * grid))
 
@@ -414,6 +433,11 @@ class Evaluator:
 
         axes[i].set_title("test gt data")
         axes[i].plot(y_test.values, color=c)
+        i += 1
+        c = cmap(i / grid)
+
+        axes[i].set_title("predicted anomaly values")
+        axes[i].plot(det.anomaly_values.sum(axis=1).values, color=c)
         i += 1
         c = cmap(i / grid)
 
@@ -453,7 +477,7 @@ class Evaluator:
             if key == "scores_lhs" or key == "scores_rhs":
                 # Todo: replace by command to just skip the current iterantion
                 # of the for-loop
-                break
+                continue
             axes[i].set_title(key)
             max_val = np.max(np.max(values))
             min_val = np.min(np.min(values))
