@@ -63,7 +63,7 @@ def evaluate_osimab_jo():
             model.load(cfg.ace.load_file)
         else:
             X_train = datasets[0].data()[0]
-            model.fit(X_train)
+            model.fit(X_train, path=None)
 
         # Evaluate model
         dets = [model]

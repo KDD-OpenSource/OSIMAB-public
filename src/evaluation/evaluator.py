@@ -67,8 +67,7 @@ class Evaluator:
         for det in self.detectors:
             det_dir = os.path.join(self.output_dir, f"model_{det.name}")
             os.makedirs(det_dir, exist_ok=True)
-            save_file = os.path.join(det_dir, "model.pth")
-            det.save(save_file)
+            det.save(det_dir)
 
     @property
     def detectors(self):

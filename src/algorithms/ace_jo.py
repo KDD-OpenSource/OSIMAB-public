@@ -118,8 +118,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         )
         return train_ace_loader, train_gaussian_loader
 
-
-    def set_ace_module(self, X: pd.DataFrame):        
+    def set_ace_module(self, X: pd.DataFrame):
         if self.aed == None:
             self.input_size = X.shape[1]
             self.sensor_list = list(X.columns)
@@ -176,8 +175,8 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         return alpha, beta
 
     def updateTradeoff(self, alpha, beta, epoch):
-        alpha = 1 - epoch / (self.num_epochs-1)
-        beta = epoch / (self.num_epochs-1)
+        alpha = 1 - epoch / (self.num_epochs - 1)
+        beta = epoch / (self.num_epochs - 1)
         return alpha, beta
 
     def calcLosses(self, ts_batch, output):
