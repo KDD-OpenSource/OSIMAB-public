@@ -63,10 +63,15 @@ class Evaluator:
         # Last passed seed value in evaluate()
         self.seed = seed
         self.cfg = cfg
+        # Save models
+        for det in self.detectors:
+            det_dir = os.path.join(self.output_dir, f"model_{det.name}")
+            os.makedirs(det_dir, exist_ok=True)
+            det.save(det_dir)
 
     @property
     def detectors(self):
-        detectors = self._detectors(self.seed, self.cfg)
+        detectors = self._detectors
         assert np.unique([x.name for x in detectors]).size == len(
             detectors
         ), "Some detectors have the same name!"
@@ -160,24 +165,6 @@ class Evaluator:
 
     def evaluate(self):
         for det in progressbar.progressbar(self.detectors):
-            if self.cfg.isTraining:
-                for ds in progressbar.progressbar(self.datasets):
-                    (X_train, y_train, X_test, y_test) = ds.data()
-                    self.logger.info(
-                        f"Training {det.name} on {ds.name} with seed {self.seed}"
-                    )
-                    try:
-                        det.fit(X_train.copy(), self.output_dir)
-                    except Exception as e:
-                        self.logger.error(
-                            f"An exception occurred while training {det.name} on {ds}: {e}"
-                        )
-                        self.logger.error(traceback.format_exc())
-                        self.results[(ds.name, det.name)] = np.zeros_like(y_test)
-                    ds._data = None
-                    gc.collect()
-            else:
-                det.load()
             for ds in progressbar.progressbar(self.datasets):
                 (X_train, y_train, X_test, y_test) = ds.data()
                 self.logger.info(

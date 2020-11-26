@@ -61,8 +61,9 @@ class OSIMABDataset(RealDataset):
                 channels.append(np.random.choice(num_channels, 1)[0])
 
             for idx, anomaly, channel in zip(idxs, anomaly_list, channels):
-                test, test_label = impute_anomaly(test, test_label, dur, idx,
-                        anomaly, channel)
+                test, test_label = impute_anomaly(
+                    test, test_label, dur, idx, anomaly, channel
+                )
 
         # after (optionally) imputing anomalies we rescale the dataset
         test = pd.DataFrame(scaler.transform(test), columns=test.columns)
@@ -73,7 +74,7 @@ def impute_anomaly(test, test_label, dur, idx, anomaly, channel):
     pd.options.mode.chained_assignment = None
     num_channels = test.shape[1]
     if anomaly == "nullSensor":
-        test.iloc[:,channel] = 0
+        test.iloc[:, channel] = 0
         test_label.iloc[:] = 1
     elif anomaly == "shift":
         tmp = test.iloc[idx : idx + dur, channel]
