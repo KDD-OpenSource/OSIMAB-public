@@ -21,14 +21,22 @@ class OSIMABDataset(RealDataset):
         self.name = os.path.basename(file_name)
         self.cfg = cfg
 
-    def load(self):
-        (a, b), (c, d) = self.get_data_osimab(test_len=self.cfg.testSize)
+    def load(self, sensor_list=None):
+        # when we use the function .data() we must give it the optional
+        # parameter of 'sensor_list' in order to be able to give it the sensor
+        # list
+        (a, b), (c, d) = self.get_data_osimab(
+            test_len=self.cfg.testSize, sensor_list=sensor_list
+        )
         self._data = (a, b, c, d)
 
-    def get_data_osimab(self, test_len):
+    def get_data_osimab(self, test_len, sensor_list=None):
         # must be replaced by the procedure of reading the zip file and
         df = catman_to_df(self.processed_path)[0]
-        df = filterSensors(df, self.cfg.dataset.regexp_sensor)
+        if sensor_list is not None:
+            df = filterSensors(df, sensor_list)
+        else:
+            df = filterSensors(df, self.cfg.dataset.regexp_sensor)
         scaler = StandardScaler()
         scaler.fit(df)
 
