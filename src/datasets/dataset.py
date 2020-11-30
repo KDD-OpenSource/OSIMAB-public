@@ -27,10 +27,12 @@ class Dataset:
     def load(self):
         """Load data"""
 
-    def data(self) -> (pd.DataFrame, pd.Series, pd.DataFrame, pd.Series):
+    def data(
+        self, sensor_list=None
+    ) -> (pd.DataFrame, pd.Series, pd.DataFrame, pd.Series):
         """Return data, load if necessary"""
         if self._data is None:
-            self.load()
+            self.load(sensor_list)
         return self._data
 
     def save(self):

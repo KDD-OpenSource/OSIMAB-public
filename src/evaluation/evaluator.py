@@ -166,13 +166,14 @@ class Evaluator:
     def evaluate(self):
         for det in progressbar.progressbar(self.detectors):
             for ds in progressbar.progressbar(self.datasets):
-                (X_train, y_train, X_test, y_test) = ds.data()
+                (X_train, y_train, X_test, y_test) = ds.data(det.sensor_list)
                 self.logger.info(
                     f"Testing {det.name} on {ds.name} with seed {self.seed}"
                 )
                 try:
                     score = det.predict(X_test.copy())
                     self.results[(ds.name, det.name)] = score
+                    self.aggregate_anomaly_values(det, ds)
                     try:
                         self.plot_details(det, ds, score)
                     except Exception:
@@ -491,6 +492,11 @@ class Evaluator:
             self.store(fig, f"details_{det.name}_{ds.name}")
         return fig
 
+    def aggregate_anomaly_values(self, det, ds):
+        mean_anomaly_values = det.anomaly_values.mean()
+        mean_df_row = pd.DataFrame(mean_anomaly_values).transpose()
+        self.store_csv(mean_df_row, f"aggregated_anomalies_{det.name}_{ds.name}")
+
     # create boxplot diagrams for auc values for each algorithm/dataset per algorithm/dataset
 
     def create_boxplots(self, runs, data, detectorwise=True, store=True):
@@ -557,6 +563,19 @@ class Evaluator:
         )
         fig.savefig(path)
         self.logger.info(f"Stored plot at {path}")
+
+    def store_csv(
+        self, df: pd.DataFrame, title, no_counters=False, store_in_figures=False
+    ):
+        timestamp = time.strftime("%Y-%m-%d-%H%M%S")
+        output_dir = os.path.join(self.output_dir, "figures", f"seed-{self.seed}")
+        os.makedirs(output_dir, exist_ok=True)
+        counters_str = (
+            "" if no_counters else f"-{len(self.detectors)}-{len(self.datasets)}"
+        )
+        path = os.path.join(output_dir, f"{title}{counters_str}-{timestamp}.csv")
+        df.to_csv(path, index=False)
+        self.logger.info(f"Stored .csv result at {path}")
 
     def store_text(self, content, title, extension="txt"):
         timestamp = int(time.time())

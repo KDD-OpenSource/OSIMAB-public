@@ -541,11 +541,9 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         return np.nanmean(lattice, axis=0).T
 
     def save(self, path):
+        os.makedirs(os.path.join("./results", self.name), exist_ok=True)
         torch.save(
             {
-                "model_state_dict": self.aed.state_dict(),
-                "mean": self.mean_lhs,
-                "cov": self.cov_lhs,
                 "input_size": self.input_size,
                 "sensor_list": self.sensor_list,
                 "sequence_length": self.sequence_length,
@@ -559,9 +557,6 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
 
         torch.save(
             {
-                "model_state_dict": self.aed.state_dict(),
-                "mean": self.mean_lhs,
-                "cov": self.cov_lhs,
                 "input_size": self.input_size,
                 "sensor_list": self.sensor_list,
                 "sequence_length": self.sequence_length,
@@ -570,11 +565,13 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 "seed": self.seed,
                 "gpu": self.gpu,
             },
-            os.path.join("./results", "model_detailed.pth"),
+            os.path.join("./results", self.name, "model_detailed.pth"),
         )
 
         torch.save(self.aed.state_dict(), os.path.join(path, "model.pth"))
-        torch.save(self.aed.state_dict(), os.path.join("./results", "model.pth"))
+        torch.save(
+            self.aed.state_dict(), os.path.join("./results", self.name, "model.pth")
+        )
 
         with open(os.path.join(path, "gaussian_param.npy"), "wb") as f:
             np.save(f, self.mean_lhs)
@@ -584,16 +581,27 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             np.save(f, self.anomaly_thresholds_lhs)
             np.save(f, self.anomaly_thresholds_rhs)
 
-        with open(os.path.join("./results", "gaussian_param.npy"), "wb") as f:
+        with open(
+            os.path.join("./results", self.name, "gaussian_param.npy"), "wb"
+        ) as f:
             np.save(f, self.mean_lhs)
             np.save(f, self.mean_rhs)
-            np.save(f, self.cov_rhs)
+            np.save(f, self.cov_lhs)
             np.save(f, self.cov_rhs)
             np.save(f, self.anomaly_thresholds_lhs)
             np.save(f, self.anomaly_thresholds_rhs)
 
-    def load(self, path=None):
-        model_details = torch.load(os.path.join("./results", "model_detailed.pth"))
+    def load(self, path):
+        model_details = torch.load(os.path.join(path, "model_detailed.pth"))
+
+        self.input_size = model_details["input_size"]
+        self.sensor_list = model_details["sensor_list"]
+        self.sequence_length = model_details["sequence_length"]
+        self.hidden_size1 = model_details["hidden_size1"]
+        self.hidden_size2 = model_details["hidden_size2"]
+        self.seed = model_details["seed"]
+        self.gpu = model_details["gpu"]
+
         self.aed = ACEModule(
             model_details["input_size"],
             model_details["sequence_length"],
@@ -602,25 +610,14 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             seed=model_details["seed"],
             gpu=model_details["gpu"],
         )
-        if path:
-            self.aed.load_state_dict(torch.load(os.path.join(path, "model.pth")))
-            with open(os.path.join(path, "gaussian_param.npy"), "rb") as f:
-                self.mean_lhs = np.load(f)
-                self.mean_rhs = np.load(f)
-                self.cov_lhs = np.load(f)
-                self.cov_rhs = np.load(f)
-                self.anomaly_thresholds_lhs = np.load(f)
-                self.anomaly_thresholds_rhs = np.load(f)
-        else:
-            self.aed.load_state_dict(torch.load(os.path.join("./results", "model.pth")))
-
-            with open(os.path.join("./results", "gaussian_param.npy"), "rb") as f:
-                self.mean_lhs = np.load(f)
-                self.mean_rhs = np.load(f)
-                self.cov_lhs = np.load(f)
-                self.cov_rhs = np.load(f)
-                self.anomaly_thresholds_lhs = np.load(f)
-                self.anomaly_thresholds_rhs = np.load(f)
+        self.aed.load_state_dict(torch.load(os.path.join(path, "model.pth")))
+        with open(os.path.join(path, "gaussian_param.npy"), "rb") as f:
+            self.mean_lhs = np.load(f)
+            self.mean_rhs = np.load(f)
+            self.cov_lhs = np.load(f)
+            self.cov_rhs = np.load(f)
+            self.anomaly_thresholds_lhs = np.load(f)
+            self.anomaly_thresholds_rhs = np.load(f)
 
     def createLatentVideo(self, encodings_lhs, encodings_rhs, outputs_rhs, sequences):
         # save in folder 'latentVideos' with timestamp?
