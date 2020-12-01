@@ -68,8 +68,9 @@ def evaluate_osimab_jo():
         intersected_sensors = []
         for dataset_train in datasets_train:
             intersected_sensors.append(dataset_train.get_sensor_list())
-        intersected_sensors = list(reduce(set.intersection, [set(item) for
-            item in intersected_sensors]))
+        intersected_sensors = list(
+            reduce(set.intersection, [set(item) for item in intersected_sensors])
+        )
 
         pathnames_test = []
         for regexp_bin in cfg.dataset.regexp_bin_test:
@@ -101,7 +102,7 @@ def evaluate_osimab_jo():
         else:
             models.append(detectors(seed, cfg)[0])
             for dataset in datasets_train:
-                X_train = dataset.data(sensor_list = intersected_sensors)[0]
+                X_train = dataset.data(sensor_list=intersected_sensors)[0]
                 models[-1].fit(X_train, path=None)
 
         # Evaluate model

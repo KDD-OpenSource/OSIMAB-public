@@ -35,8 +35,6 @@ class OSIMABDataset(RealDataset):
             sensor_list.extend(list(tmp))
         return sensor_list
 
-
-
     def load(self, sensor_list=None):
         # when we use the function .data() we must give it the optional
         # parameter of 'sensor_list' in order to be able to give it the sensor

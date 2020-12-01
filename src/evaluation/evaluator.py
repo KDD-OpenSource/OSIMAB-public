@@ -174,10 +174,11 @@ class Evaluator:
                 try:
                     score = det.predict(X_test.copy())
                     self.results[(ds.name, det.name)] = score
-                    anomaly_values = pd.concat([anomaly_values,
-                            self.aggregate_anomaly_values(det, ds)]).mean()
+                    anomaly_values = pd.concat(
+                        [anomaly_values, self.aggregate_anomaly_values(det, ds)]
+                    ).mean()
                     anomaly_values = pd.DataFrame(anomaly_values).transpose()
-                    #self.aggregate_anomaly_values(det, ds)
+                    # self.aggregate_anomaly_values(det, ds)
                     try:
                         self.plot_details(det, ds, score)
                     except Exception:
@@ -483,7 +484,7 @@ class Evaluator:
     def aggregate_anomaly_values(self, det, ds):
         mean_anomaly_values = det.anomaly_values.mean()
         mean_df_row = pd.DataFrame(mean_anomaly_values).transpose()
-        #self.store_csv(mean_df_row, f"aggregated_anomalies_{det.name}_{ds.name}")
+        # self.store_csv(mean_df_row, f"aggregated_anomalies_{det.name}_{ds.name}")
         return mean_df_row
 
     # create boxplot diagrams for auc values for each algorithm/dataset per algorithm/dataset
