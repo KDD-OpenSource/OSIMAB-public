@@ -164,6 +164,7 @@ class Evaluator:
             return threshold[np.argmax(f_score)]
 
     def evaluate(self):
+        anomaly_values = pd.DataFrame()
         for det in progressbar.progressbar(self.detectors):
             for ds in progressbar.progressbar(self.datasets):
                 (X_train, y_train, X_test, y_test) = ds.data(det.sensor_list)
@@ -173,7 +174,10 @@ class Evaluator:
                 try:
                     score = det.predict(X_test.copy())
                     self.results[(ds.name, det.name)] = score
-                    self.aggregate_anomaly_values(det, ds)
+                    anomaly_values = pd.concat([anomaly_values,
+                            self.aggregate_anomaly_values(det, ds)]).mean()
+                    anomaly_values = pd.DataFrame(anomaly_values).transpose()
+                    #self.aggregate_anomaly_values(det, ds)
                     try:
                         self.plot_details(det, ds, score)
                     except Exception:
@@ -186,23 +190,7 @@ class Evaluator:
                     self.results[(ds.name, det.name)] = np.zeros_like(y_test)
                 ds._data = None
                 gc.collect()
-            # import pdb; pdb.set_trace()
-            # det.save("results/tmp")
-            # det_ = AutoEncoderJO(
-            #     num_epochs=1,
-            #     hidden_size1=5,
-            #     hidden_size2=5,
-            #     lr=0.001,
-            #     sequence_length=100,
-            #     latentVideo=False,
-            #     train_max=1,
-            #     sensor_specific=True,
-            #     corr_loss=True,
-            #     num_error_vects=None,
-            #     seed=2,
-            # )
-            # # import pdb; pdb.set_trace()
-            # det_.load("results/tmp")
+        self.store_csv(anomaly_values, f"aggregated_anomalies")
 
     def benchmarks(self) -> pd.DataFrame:
         df = pd.DataFrame()
@@ -495,7 +483,8 @@ class Evaluator:
     def aggregate_anomaly_values(self, det, ds):
         mean_anomaly_values = det.anomaly_values.mean()
         mean_df_row = pd.DataFrame(mean_anomaly_values).transpose()
-        self.store_csv(mean_df_row, f"aggregated_anomalies_{det.name}_{ds.name}")
+        #self.store_csv(mean_df_row, f"aggregated_anomalies_{det.name}_{ds.name}")
+        return mean_df_row
 
     # create boxplot diagrams for auc values for each algorithm/dataset per algorithm/dataset
 

@@ -5,6 +5,7 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import random
 from .real_datasets import RealDataset
 from .catman_data import catman_to_df
+from pycatmanread.catmanread import CatmanRead
 import os
 
 
@@ -20,6 +21,21 @@ class OSIMABDataset(RealDataset):
         self.processed_path = os.path.abspath(file_name)
         self.name = os.path.basename(file_name)
         self.cfg = cfg
+
+    def get_sensor_list(self):
+        cmreader = CatmanRead()
+        cmreader.open_sevenzip(self.processed_path)
+        cmreader.read_all_header_data()
+        info_df = cmreader.channel_info_to_df()
+        sensor_list = []
+        print(f"Processing {self.processed_path}")
+        for regex in self.cfg.dataset.regexp_sensor:
+            tmp = info_df[info_df["Channel Name"].str.contains(regex)]
+            tmp = tmp["Channel Name"]
+            sensor_list.extend(list(tmp))
+        return sensor_list
+
+
 
     def load(self, sensor_list=None):
         # when we use the function .data() we must give it the optional

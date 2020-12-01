@@ -8,6 +8,7 @@ from src.algorithms import LSTMED
 from src.algorithms import AutoEncoderJO
 from src.algorithms import AutoCorrelationEncoder
 from config import config
+from functools import reduce
 import random
 import glob
 import os
@@ -64,6 +65,12 @@ def evaluate_osimab_jo():
             OSIMABDataset(cfg, file_name=filename) for filename in pathnames_train
         ]
 
+        intersected_sensors = []
+        for dataset_train in datasets_train:
+            intersected_sensors.append(dataset_train.get_sensor_list())
+        intersected_sensors = list(reduce(set.intersection, [set(item) for
+            item in intersected_sensors]))
+
         pathnames_test = []
         for regexp_bin in cfg.dataset.regexp_bin_test:
             pathnamesRegExp = os.path.join(cfg.dataset.data_dir, regexp_bin)
@@ -94,7 +101,7 @@ def evaluate_osimab_jo():
         else:
             models.append(detectors(seed, cfg)[0])
             for dataset in datasets_train:
-                X_train = dataset.data()[0]
+                X_train = dataset.data(sensor_list = intersected_sensors)[0]
                 models[-1].fit(X_train, path=None)
 
         # Evaluate model
