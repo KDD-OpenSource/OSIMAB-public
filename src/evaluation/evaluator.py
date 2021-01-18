@@ -12,10 +12,12 @@ from src.algorithms import AutoEncoderJO
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as path_effects
 from matplotlib.font_manager import FontProperties
+from itertools import product
 import numpy as np
 import pandas as pd
 import progressbar
 import time
+import pathos.multiprocessing as mp
 import yaml
 from sklearn.metrics import accuracy_score, fbeta_score
 from sklearn.metrics import precision_recall_fscore_support as prf
@@ -45,29 +47,29 @@ class Evaluator:
         ), "Some datasets have the same name!"
         self.datasets = datasets
         self._detectors = detectors
+        self.create_log_file = create_log_file
         self.output_dir = output_dir or "reports"
-        timestamp = time.strftime("%Y-%m-%d-%H%M%S")
-        run_dir = timestamp
-        if cfg is not None and hasattr(cfg, "ctx"):
-            run_dir += f"_{cfg.ctx}"
-        self.output_dir = os.path.join(self.output_dir, run_dir)
-        self.results = dict()
-        if create_log_file:
+        if "PredictionResults" not in self.output_dir:
+            timestamp = time.strftime("%Y-%m-%d-%H%M%S")
+            run_dir = timestamp
+            if cfg is not None and hasattr(cfg, "ctx"):
+                run_dir += f"_{cfg.ctx}_test"
+            self.output_dir = os.path.join(self.output_dir, run_dir)
+            self.results = dict()
             init_logging(os.path.join(self.output_dir, "logs"))
-        if cfg is not None:
-            with open(os.path.join(self.output_dir, "config.yaml"), "w") as cfg_file:
-                yaml.dump(cfg.config_dict, cfg_file)
-        self.logger = logging.getLogger(__name__)
+            if cfg is not None:
+                with open(
+                    os.path.join(self.output_dir, "config.yaml"), "w"
+                ) as cfg_file:
+                    yaml.dump(cfg.config_dict, cfg_file)
+            self.logger = logging.getLogger(__name__)
+        else:
+            self.results = dict()
         # Dirty hack: Is set by the main.py to insert results from multiple evaluator runs
         self.benchmark_results = None
         # Last passed seed value in evaluate()
         self.seed = seed
         self.cfg = cfg
-        # Save models
-        for det in self.detectors:
-            det_dir = os.path.join(self.output_dir, f"model_{det.name}")
-            os.makedirs(det_dir, exist_ok=True)
-            det.save(det_dir)
 
     @property
     def detectors(self):
@@ -85,7 +87,8 @@ class Evaluator:
         os.makedirs(output_dir, exist_ok=True)
         timestamp = time.strftime("%Y-%m-%d-%H%M%S")
         path = os.path.join(output_dir, f"{name}-{timestamp}.pkl")
-        self.logger.info(f"Store evaluator results at {os.path.abspath(path)}")
+        if self.create_log_file:
+            self.logger.info(f"Store evaluator results at {os.path.abspath(path)}")
         save_dict = {
             "datasets": [x.name for x in self.datasets],
             "detectors": [x.name for x in self.detectors],
@@ -103,17 +106,22 @@ class Evaluator:
     def import_results(self, name):
         output_dir = os.path.join(self.output_dir, "evaluators")
         path = os.path.join(output_dir, f"{name}.pkl")
-        self.logger.info(f"Read evaluator results at {os.path.abspath(path)}")
+        if self.create_log_file:
+            self.logger.info(f"Read evaluator results at {os.path.abspath(path)}")
         with open(path, "rb") as f:
             save_dict = pickle.load(f)
 
-        self.logger.debug(f'Importing detectors {"; ".join(save_dict["detectors"])}')
+        if self.create_log_file:
+            self.logger.debug(
+                f'Importing detectors {"; ".join(save_dict["detectors"])}'
+            )
         my_detectors = [x.name for x in self.detectors]
         assert np.array_equal(
             save_dict["detectors"], my_detectors
         ), "Detectors should be the same"
 
-        self.logger.debug(f'Importing datasets {"; ".join(save_dict["datasets"])}')
+        if self.create_log_file:
+            self.logger.debug(f'Importing datasets {"; ".join(save_dict["datasets"])}')
         my_datasets = [x.name for x in self.datasets]
         assert np.array_equal(
             save_dict["datasets"], my_datasets
@@ -164,34 +172,97 @@ class Evaluator:
             return threshold[np.argmax(f_score)]
 
     def evaluate(self):
-        anomaly_values = pd.DataFrame()
-        for det in progressbar.progressbar(self.detectors):
+        parallel = True
+        if parallel:
+            anomaly_values_loc = []
+            # arg_list = []
+
             for ds in progressbar.progressbar(self.datasets):
-                (X_train, y_train, X_test, y_test) = ds.data(det.sensor_list)
-                self.logger.info(
-                    f"Testing {det.name} on {ds.name} with seed {self.seed}"
-                )
-                try:
-                    score = det.predict(X_test.copy())
-                    self.results[(ds.name, det.name)] = score
-                    anomaly_values = pd.concat(
-                        [anomaly_values, self.aggregate_anomaly_values(det, ds)]
-                    ).mean()
-                    anomaly_values = pd.DataFrame(anomaly_values).transpose()
-                    # self.aggregate_anomaly_values(det, ds)
-                    try:
-                        self.plot_details(det, ds, score)
-                    except Exception:
-                        pass
-                except Exception as e:
-                    self.logger.error(
-                        f"An exception occurred while testing {det.name} on {ds}: {e}"
+                arg_list = []
+                for det in self.detectors:
+                    arg_list.append((det, ds))
+
+                pool = mp.Pool(mp.cpu_count())
+                for arguments in arg_list:
+                    anomaly_values_loc.append(
+                        pool.apply_async(self.predict_async, args=arguments)
                     )
-                    self.logger.error(traceback.format_exc())
-                    self.results[(ds.name, det.name)] = np.zeros_like(y_test)
-                ds._data = None
-                gc.collect()
-        self.store_csv(anomaly_values, f"aggregated_anomalies")
+                pool.close()
+                pool.join()
+
+            if "or" in self.cfg.aggrFunc:
+                anomaly_values_or = pd.DataFrame()
+                for anomaly_value_loc in anomaly_values_loc:
+                    anomaly_values_or = pd.concat(
+                        [anomaly_values_or, anomaly_value_loc.get()[0]]
+                    )
+                anomaly_values_or = pd.DataFrame(anomaly_values_or.mean()).transpose()
+                self.store_csv(anomaly_values_or, f"aggregated_anomalies_or")
+
+            if "xor" in self.cfg.aggrFunc:
+                anomaly_values_xor = pd.DataFrame()
+                for anomaly_value_loc in anomaly_values_loc:
+                    anomaly_values_xor = pd.concat(
+                        [anomaly_values_xor, anomaly_value_loc.get()[1]]
+                    )
+                    anomaly_values_xor = pd.DataFrame(
+                        anomaly_values_xor.mean()
+                    ).transpose()
+                    self.store_csv(anomaly_values_xor, f"aggregated_anomalies_xor")
+
+            for anomaly_value_loc in anomaly_values_loc:
+                self.results.update(anomaly_value_loc.get()[2])
+
+        else:
+            anomaly_values_or = pd.DataFrame()
+            anomaly_values_xor = pd.DataFrame()
+            for det in progressbar.progressbar(self.detectors):
+                for ds in progressbar.progressbar(self.datasets):
+                    (X_train, y_train, X_test, y_test) = ds.data(det.sensor_list)
+                    if self.create_log_file:
+                        self.logger.info(
+                            f"Testing {det.name} on {ds.name} with seed {self.seed}"
+                        )
+                    try:
+                        score = det.predict(X_test.copy())
+                        self.results[(ds.name, det.name)] = score
+                        if "or" in self.cfg.aggrFunc:
+                            anomaly_values_or = pd.concat(
+                                [
+                                    anomaly_values_or,
+                                    self.aggregate_anomaly_values_or(det, ds),
+                                ]
+                            ).mean()
+                            anomaly_values_or = pd.DataFrame(
+                                anomaly_values_or
+                            ).transpose()
+                        if "xor" in self.cfg.aggrFunc:
+                            anomaly_values_xor = pd.concat(
+                                [
+                                    anomaly_values_xor,
+                                    self.aggregate_anomaly_values_xor(det, ds),
+                                ]
+                            ).mean()
+                            anomaly_values_xor = pd.DataFrame(
+                                anomaly_values_xor
+                            ).transpose()
+                        try:
+                            self.plot_details(det, ds, score)
+                        except Exception:
+                            pass
+                    except Exception as e:
+                        if self.create_log_file:
+                            self.logger.error(
+                                f"An exception occurred while testing {det.name} on {ds}: {e}"
+                            )
+                            self.logger.error(traceback.format_exc())
+                        self.results[(ds.name, det.name)] = np.zeros_like(y_test)
+                    ds._data = None
+                    gc.collect()
+            if "or" in self.cfg.aggrFunc:
+                self.store_csv(anomaly_values_or, f"aggregated_anomalies_or")
+            if "xor" in self.cfg.aggrFunc:
+                self.store_csv(anomaly_values_xor, f"aggregated_anomalies_xor")
 
     def benchmarks(self) -> pd.DataFrame:
         df = pd.DataFrame()
@@ -346,7 +417,8 @@ class Evaluator:
             fig.suptitle(f"ROC curve on {ds.name}", fontsize=14, y="1.1")
             subplot_count = 1
             for det in detectors:
-                self.logger.info(f"Plotting ROC curve for {det.name} on {ds.name}")
+                if self.create_log_file:
+                    self.logger.info(f"Plotting ROC curve for {det.name} on {ds.name}")
                 score = self.results[(ds.name, det.name)]
                 if np.isnan(score).all():
                     score = np.zeros_like(score)
@@ -398,7 +470,7 @@ class Evaluator:
         for value in det.prediction_details.values():
             grid += 1 if value.ndim == 1 else value.shape[0]
         grid += X_test.shape[1]  # data
-        grid += 1 + 1 + 1  # score, gt and prediction
+        grid += 1 + 1 + 1 + 1  # score, gt and 2* prediction
 
         fig, axes = plt.subplots(grid, 1, figsize=(15, 1.5 * grid))
 
@@ -418,8 +490,11 @@ class Evaluator:
         i += 1
         c = cmap(i / grid)
 
-        axes[i].set_title("predicted anomaly values")
-        axes[i].plot(det.anomaly_values.sum(axis=1).values, color=c)
+        axes[i].set_title("predicted anomaly values or")
+        axes[i].plot(det.anomaly_values_or.sum(axis=1).values, color=c)
+        i += 1
+        axes[i].set_title("predicted anomaly values xor")
+        axes[i].plot(det.anomaly_values_xor.sum(axis=1).values, color=c)
         i += 1
         c = cmap(i / grid)
 
@@ -461,8 +536,8 @@ class Evaluator:
                 # of the for-loop
                 continue
             axes[i].set_title(key)
-            max_val = np.max(np.max(values))
-            min_val = np.min(np.min(values))
+            max_val = np.max(np.max(values)) + 0.1 * abs(np.max(np.max(values))) + 0.1
+            min_val = np.min(np.min(values)) - 0.1 * abs(np.min(np.min(values))) - 0.1
             if values.ndim == 1:
                 axes[i].plot(values, color=c)
                 axes[i].set_ylim(min_val, max_val)
@@ -473,16 +548,24 @@ class Evaluator:
                     axes[i].set_ylim(min_val, max_val)
                     i += 1
             else:
-                self.logger.warning("plot_details: not sure what to do")
+                if self.create_log_file:
+                    self.logger.warning("plot_details: not sure what to do")
             c = cmap(i / grid)
 
         fig.tight_layout()
         if store:
             self.store(fig, f"details_{det.name}_{ds.name}")
+
         return fig
 
-    def aggregate_anomaly_values(self, det, ds):
-        mean_anomaly_values = det.anomaly_values.mean()
+    def aggregate_anomaly_values_or(self, det, ds):
+        mean_anomaly_values = det.anomaly_values_or.mean()
+        mean_df_row = pd.DataFrame(mean_anomaly_values).transpose()
+        # self.store_csv(mean_df_row, f"aggregated_anomalies_{det.name}_{ds.name}")
+        return mean_df_row
+
+    def aggregate_anomaly_values_xor(self, det, ds):
+        mean_anomaly_values = det.anomaly_values_xor.mean()
         mean_df_row = pd.DataFrame(mean_anomaly_values).transpose()
         # self.store_csv(mean_df_row, f"aggregated_anomalies_{det.name}_{ds.name}")
         return mean_df_row
@@ -552,20 +635,23 @@ class Evaluator:
             output_dir, f"{title}{counters_str}-{timestamp}.{extension}"
         )
         fig.savefig(path)
-        self.logger.info(f"Stored plot at {path}")
+        if self.create_log_file:
+            self.logger.info(f"Stored plot at {path}")
 
     def store_csv(
         self, df: pd.DataFrame, title, no_counters=False, store_in_figures=False
     ):
         timestamp = time.strftime("%Y-%m-%d-%H%M%S")
-        output_dir = os.path.join(self.output_dir, "figures", f"seed-{self.seed}")
-        os.makedirs(output_dir, exist_ok=True)
+        output_dir = self.output_dir
+        # output_dir = os.path.join(self.output_dir, "figures", f"seed-{self.seed}")
+        # os.makedirs(output_dir, exist_ok=True)
         counters_str = (
             "" if no_counters else f"-{len(self.detectors)}-{len(self.datasets)}"
         )
         path = os.path.join(output_dir, f"{title}{counters_str}-{timestamp}.csv")
         df.to_csv(path, index=False)
-        self.logger.info(f"Stored .csv result at {path}")
+        if self.create_log_file:
+            self.logger.info(f"Stored .csv result at {path}")
 
     def store_text(self, content, title, extension="txt"):
         timestamp = int(time.time())
@@ -577,14 +663,16 @@ class Evaluator:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
             f.write(content)
-        self.logger.info(f"Stored {extension} file at {path}")
+        if self.create_log_file:
+            self.logger.info(f"Stored {extension} file at {path}")
 
     def print_merged_table_per_dataset(self, results):
         for ds in self.datasets:
             table = tabulate(
                 results[results["dataset"] == ds.name], headers="keys", tablefmt="psql"
             )
-            self.logger.info(f"Dataset: {ds.name}\n{table}")
+            if self.create_log_file:
+                self.logger.info(f"Dataset: {ds.name}\n{table}")
 
     def gen_merged_latex_per_dataset(self, results, title_suffix=None, store=True):
         title = f'latex_merged{f"_{title_suffix}" if title_suffix else ""}'
@@ -603,7 +691,8 @@ class Evaluator:
                 headers="keys",
                 tablefmt="psql",
             )
-            self.logger.info(f"Detector: {det.name}\n{table}")
+            if self.create_log_file:
+                self.logger.info(f"Detector: {det.name}\n{table}")
 
     def gen_merged_latex_per_algorithm(self, results, title_suffix=None, store=True):
         title = f'latex_merged{f"_{title_suffix}" if title_suffix else ""}'
@@ -762,7 +851,9 @@ class Evaluator:
         if len(datasets) > 2:
             fig.tight_layout()
         if store:
-            evaluators[0].store(fig, "heatmap", no_counters=True, store_in_figures=True)
+            evaluators[0].store(
+                fig, "heatmap", no_counters=True, store_in_figures=True
+            )
         return fig
 
     def plot_single_heatmap(self, store=True):
@@ -843,3 +934,24 @@ class Evaluator:
 
     def threshold(self, score):
         return np.nanmean(score) + 2 * np.nanstd(score)
+
+    def predict_async(self, det, ds):
+        results = {}
+        (X_train, y_train, X_test, y_test) = ds.data(det.sensor_list)
+        try:
+            score = det.predict(X_test.copy())
+            results[(ds.name, det.name)] = score
+            self.results[(ds.name, det.name)] = score
+            print(f"Testing {det.name} on {ds.name} done")
+            anomaly_values_or = self.aggregate_anomaly_values_or(det, ds)
+            anomaly_values_xor = self.aggregate_anomaly_values_xor(det, ds)
+            try:
+                self.plot_details(det, ds, score)
+            except Exception:
+                print(f"Could not plot details with {ds.name} and {det.name}")
+        except Exception as e:
+            results[(ds.name, det.name)] = np.zeros_like(y_test)
+            print(f"Exception in predict_async with {ds.name} and {det.name}")
+        ds._data = None
+        gc.collect()
+        return anomaly_values_or, anomaly_values_xor, results

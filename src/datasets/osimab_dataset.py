@@ -1,4 +1,5 @@
 import pandas as pd
+import re
 from pprint import pprint
 import numpy as np
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
@@ -22,18 +23,77 @@ class OSIMABDataset(RealDataset):
         self.name = os.path.basename(file_name)
         self.cfg = cfg
 
+    def check_validity(self, cm_reader):
+        try:
+            valid = True
+            info_df = cm_reader.channel_info_to_df()
+            # filter out measuring rates
+            info_df = info_df.loc[
+                -(info_df["Channel Name"].str.contains(r".*essrate.*"))
+            ]
+            info_df = info_df.loc[-(info_df["Channel Name"].str.contains(r".*time.*"))]
+            info_df = info_df.loc[-(info_df["Channel Name"].str.contains(r".*Time.*"))]
+            info_df = info_df.loc[
+                -(info_df["Channel Name"].str.contains(r".*Watchdog.*"))
+            ]
+            info_df = info_df.loc[-(info_df["Channel Name"].str.contains(r".*WIM.*"))]
+            channel_names = info_df["Channel Name"]
+            trim_pattern = r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}_"
+            # channel_names = [re.sub(trim_pattern, '', channel)
+            #                 for channel in channel_names]
+            data_dict = {}
+
+            # target_values = info_df["Number of Values"].max()
+            target_values = info_df[info_df["Sampling Frequency"] == 100][
+                "Number of Values"
+            ].unique()[0]
+            # target_frequency = info_df["Sampling Frequency"].max()
+            if target_values < 100000:
+                valid = False
+            target_frequency = 100
+            measure_time = target_values / target_frequency
+            target_index = np.arange(0, measure_time, 1 / target_frequency)
+            # here must be something like enumerate(channel_names)
+            # for n in range(cm_reader.no_of_channels):
+            for n in info_df.index:
+                channel_name = re.sub(trim_pattern, "", channel_names[n])
+                channel_data = cm_reader.return_channel_data_n(n)
+                frequency = info_df["Sampling Frequency"][n]
+                channel_index = np.arange(0, measure_time, 1 / frequency)
+                try:
+                    channel_interp = np.interp(
+                        target_index, channel_index, channel_data
+                    )
+                except:
+                    print(f"found a culprit: {info_df.loc[n]}")
+                    valid = False
+            return valid
+        except:
+            return False
+
     def get_sensor_list(self):
         cmreader = CatmanRead()
         cmreader.open_sevenzip(self.processed_path)
         cmreader.read_all_header_data()
         info_df = cmreader.channel_info_to_df()
-        sensor_list = []
-        print(f"Processing {self.processed_path}")
-        for regex in self.cfg.dataset.regexp_sensor:
-            tmp = info_df[info_df["Channel Name"].str.contains(regex)]
-            tmp = tmp["Channel Name"]
-            sensor_list.extend(list(tmp))
-        return sensor_list
+        validity = self.check_validity(cmreader)
+        if validity == False:
+            return None
+        else:
+            target_values = info_df[info_df["Sampling Frequency"] == 100][
+                "Number of Values"
+            ].unique()[0]
+            sensor_list = []
+            print(f"Processing {self.processed_path}")
+            for regex in self.cfg.dataset.regexp_sensor:
+                tmp = info_df[info_df["Channel Name"].str.contains(regex)]
+                tmp = tmp["Channel Name"]
+                sensor_list.extend(list(tmp))
+            pd.DataFrame(sensor_list).to_csv(f"files_sensors/{self.name}.csv")
+            return sensor_list
+
+    def free_space(self):
+        self._data = None
 
     def load(self, sensor_list=None):
         # when we use the function .data() we must give it the optional
@@ -59,9 +119,11 @@ class OSIMABDataset(RealDataset):
         train = df.iloc[:n_train]
         train = pd.DataFrame(scaler.transform(train), columns=train.columns)
 
-        # take the last indices
         rand_idx = df.shape[0] - 1 - test_len
         test = df.iloc[rand_idx : rand_idx + test_len]
+        # take the last indices
+        if test_len == 360000:
+            test = df
 
         train_label = pd.Series(np.zeros(train.shape[0]))
         test_label = pd.Series(np.zeros(test.shape[0]))
@@ -105,7 +167,7 @@ def impute_anomaly(test, test_label, dur, idx, anomaly, channel):
         test_label.iloc[idx : idx + dur] = 1
     elif anomaly == "variance":
         tmp = test.iloc[idx : idx + dur, channel]
-        tmp = tmp * 3
+        tmp = tmp * 4
         test.iloc[idx : idx + dur, channel] = tmp
         test_label.iloc[idx : idx + dur] = 1
     elif anomaly == "peak":
@@ -120,7 +182,7 @@ def impute_anomaly(test, test_label, dur, idx, anomaly, channel):
         test_label.iloc[idx : idx + dur] = 1
     elif anomaly == "trend":
         tmp = test.iloc[idx : idx + dur, channel]
-        tmp = tmp + np.linspace(0, 3, tmp.shape[0])
+        tmp = tmp + np.linspace(0, 5, tmp.shape[0])
         test.iloc[idx : idx + dur, channel] = tmp
         test_label.iloc[idx : idx + dur] = 1
     else:

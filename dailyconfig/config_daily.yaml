@@ -1,20 +1,21 @@
 # August: Change of Frequency
 #ctx:                            'Test_08_09_Model_On_08_10_20_CreateNicePlots_Anomalies_ACC_Shift'
-ctx:                            'TestPredictionAfterThresholdAdjustment_withoutAnomalies'
+#ctx:                            'TestMultipleModels_consistencyCheck'
+ctx:                            'DailyPrediction'
 
 epoch:                          10
 log_file:                       False
 
 isTraining:                     True
 
-aggrFunc:                       ['or', 'xor']
+aggrFunc:                       ['xor']
 
 ace:
     seq_len:                    100
     hiddenSize1:                5
     hiddenSize2:                5
     train_per:                  1
-    details:                    True
+    details:                    False
     LR:                         0.001
     train_max:                  0.02
     #train_max:                  0.002
@@ -43,8 +44,9 @@ ace:
                                 'results/year_model_AutoencoderJO_[F6.*ACC.*]',
                                 'results/year_model_AutoencoderJO_[F6.*WA.*]',
                                 ]
-    #load_file:                  Null
 
+    #testSize:                       359999
+    #testSize:                       360000
 testSize:                       360000
 
 dataset:
@@ -58,18 +60,17 @@ dataset:
     regexp_bin_train:           Null
     #regexp_bin_train:            ['OSIMAB_2020_08_09*[0-9].bin.zip']
     #regexp_bin_test:            ['OSIMAB_2020_08_09_0[0-3]*[0-9].bin.zip']
-    regexp_bin_test:            ['OSIMAB_2020_12_28_15*[0-9].bin.zip']
-    regexp_sensor:              ['F5.*ACC.*']
+    regexp_bin_test:            ['OSIMAB_2021*[0-9].bin.zip']
+    regexp_sensor:              ['.*']
     #regexp_sensor:              ['.*']
     #regexp_sensor:              ['N.*_F3.*SG_2_N.*', 'N.*_F3.*SG_2_SO.*']
     #regexp_sensor:              ['N.*_F2.*SG_2_N.*']
     #regexp_sensor:              ['.*']
     #impute_anomaly:             True
-    anomalies:
-        nullSensor:             1
-        shift:                  1
-        variance:               1
-        peak:                   1
-        timeshift:              1
-        trend:                  1
     anomalies:                  Null
+    #nullSensor:             1
+        #shift:                  1
+        #variance:               1
+        #peak:                   1
+        #timeshift:              1
+        #trend:                  1

@@ -52,29 +52,48 @@ def read_catman_file(file_name, WIM_flg=False):
     info_df = cm_reader.channel_info_to_df()
     # filter out measuring rates
     info_df = info_df.loc[-(info_df["Channel Name"].str.contains(r".*essrate.*"))]
-    if WIM_flg == False:
-        info_df = info_df.loc[-(info_df["Channel Name"].str.contains(r".*WIM.*"))]
+    info_df = info_df.loc[-(info_df["Channel Name"].str.contains(r".*time.*"))]
+    info_df = info_df.loc[-(info_df["Channel Name"].str.contains(r".*Time.*"))]
+    info_df = info_df.loc[-(info_df["Channel Name"].str.contains(r".*Watchdog.*"))]
+    info_df = info_df.loc[-(info_df["Channel Name"].str.contains(r".*WIM.*"))]
     channel_names = info_df["Channel Name"]
     trim_pattern = r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}_"
     # channel_names = [re.sub(trim_pattern, '', channel)
     #                 for channel in channel_names]
     data_dict = {}
 
-    target_values = info_df["Number of Values"].max()
-    target_frequency = info_df["Sampling Frequency"].max()
+    # target_values = info_df["Number of Values"].max()
+    target_values = info_df[info_df["Sampling Frequency"] == 100][
+        "Number of Values"
+    ].unique()[0]
+    # target_frequency = info_df["Sampling Frequency"].max()
+    target_frequency = 100
+    # print(target_frequency)
+    # print(target_values)
     measure_time = target_values / target_frequency
     target_index = np.arange(0, measure_time, 1 / target_frequency)
     # here must be something like enumerate(channel_names)
     # for n in range(cm_reader.no_of_channels):
+    # import pdb; pdb.set_trace()
+    data_df_test = pd.DataFrame(np.nan, index=target_index, columns=channel_names)
     for n in info_df.index:
         channel_name = re.sub(trim_pattern, "", channel_names[n])
         channel_data = cm_reader.return_channel_data_n(n)
         frequency = info_df["Sampling Frequency"][n]
         channel_index = np.arange(0, measure_time, 1 / frequency)
+        # print(channel_name)
+        # print(f"Target Index {target_index.shape}")
+        # print(f"Channel Index {channel_index.shape}")
+        # print(f"Channel Data {channel_data.shape}")
+        # import pdb; pdb.set_trace()
         channel_interp = np.interp(target_index, channel_index, channel_data)
-        data_dict[channel_name] = channel_interp
-    data_df = pd.DataFrame(data_dict)
-    return data_df
+        # data_dict[channel_name] = channel_interp
+        data_df_test[channel_name] = channel_interp
+    # import pdb; pdb.set_trace()
+
+    # data_df = pd.DataFrame(data_dict)
+    # return data_df
+    return data_df_test
 
 
 def standardize_df(df, scaler):

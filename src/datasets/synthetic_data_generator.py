@@ -599,7 +599,9 @@ class SyntheticDataGenerator:
         baseline_config = {}
 
         indices = range(0, n + 1, n // 4)
-        outl_chunks = [np.arange(j, indices[i + 1]) for i, j in enumerate(indices[:-1])]
+        outl_chunks = [
+            np.arange(j, indices[i + 1]) for i, j in enumerate(indices[:-1])
+        ]
         timestamps_ext = [
             (2192,),
             (2212,),

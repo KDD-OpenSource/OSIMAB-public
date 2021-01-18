@@ -53,7 +53,8 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         self.latentVideo = latentVideo
         self.anomaly_thresholds_lhs = []
         self.anomaly_thresholds_rhs = []
-        self.anomaly_values = None
+        self.anomaly_values_or = None
+        self.anomaly_values_xor = None
 
         self.encoding_details = {}
 
@@ -196,7 +197,9 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
 
         if self.compute_corr_loss:
             loss2 += torch.mean(
-                self.corr_loss(output[1], output[2].view((ts_batch.size()[0], -1)).data)
+                self.corr_loss(
+                    output[1], output[2].view((ts_batch.size()[0], -1)).data
+                )
             )
         return loss1, loss2
 
@@ -215,6 +218,8 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
 
     def corr_loss(self, yhat, y):
         subclassLength = self.hidden_size1
+        yhat = yhat.view((-1, subclassLength))
+        y = y.view((-1, subclassLength))
         vhat = yhat - torch.mean(yhat, 0)
         vy = y - torch.mean(y, 0)
         cost = torch.sum(vhat * vy, 1)
@@ -227,9 +232,9 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         print(f"Epoch {epoch}")
         print(f"Epoch Loss Lhs: {epochLossLhs}")
         print(f"Epoch Loss Rhs: {epochLossRhs}")
-        print("Mean of Latent Space is:")
+        # print("Mean of Latent Space is:")
         print(latentSpace.mean(axis=0))
-        print("Standard Deviation of Latent Space is:")
+        # print("Standard Deviation of Latent Space is:")
         print(latentSpace.std(axis=0))
 
     def train_gaussians(self, train_gaussian_loader):
@@ -244,12 +249,12 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         for mean, var in zip(self.mean_lhs, np.diagonal(self.cov_lhs)):
             normdist = norm(loc=mean, scale=np.sqrt(var))
             self.anomaly_thresholds_lhs.append(
-                -normdist.logpdf(mean + 5 * np.sqrt(var))
+                -normdist.logpdf(mean + 3 * np.sqrt(var))
             )
         for mean, var in zip(self.mean_rhs, np.diagonal(self.cov_rhs)):
             normdist = norm(loc=mean, scale=np.sqrt(var))
             self.anomaly_thresholds_rhs.append(
-                -normdist.logpdf(mean + 5 * np.sqrt(var))
+                -normdist.logpdf(mean + 3 * np.sqrt(var))
             )
 
     def update_gaussians(self, error_lhs, error_rhs):
@@ -375,28 +380,29 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             X, scores_lhs, scores_rhs, scoresSensors_lhs, scoresSensors_rhs
         )
 
-        self.anomaly_values = self.get_anomaly_values(
+        self.anomaly_values_or = self.get_anomaly_values_or(
             X, scoresSensors_lhs, scoresSensors_rhs
         )
+        self.anomaly_values_xor = self.get_anomaly_values_xor(
+            X, scoresSensors_lhs, scoresSensors_rhs
+        )
+        anomaly_values_lhs = (scoresSensors_lhs.T > self.anomaly_thresholds_lhs).T
+        anomaly_values_rhs = (scoresSensors_rhs.T > self.anomaly_thresholds_rhs).T
+        # self.anomaly_values_xor = anomaly_values_lhs ^ anomaly_values_rhs
 
         if self.details:
             self.prediction_details.update(
-                {"anomaly_values": self.anomaly_values.values.T}
+                {"anomaly_values": self.anomaly_values_or.values.T}
             )
+
+            self.prediction_details.update({"anomaly_values_lhs": anomaly_values_lhs})
+            self.prediction_details.update({"anomaly_values_rhs": anomaly_values_rhs})
+
+            # New
             self.prediction_details.update(
-                {
-                    "anomaly_values_lhs": (
-                        scoresSensors_lhs.T > self.anomaly_thresholds_lhs
-                    ).T
-                }
+                {"anomaly_values_diff": self.anomaly_values_xor.values.T}
             )
-            self.prediction_details.update(
-                {
-                    "anomaly_values_rhs": (
-                        scoresSensors_lhs.T > self.anomaly_thresholds_rhs
-                    ).T
-                }
-            )
+
             self.prediction_details.update({"scoresSensors_lhs": scoresSensors_lhs})
             self.prediction_details.update({"scoresSensors_rhs": scoresSensors_rhs})
             self.prediction_details.update({"scores_lhs": scores_lhs})
@@ -431,7 +437,9 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         return scores_lhs + scores_rhs
 
     def set_gaussians(self):
-        mvnormal = multivariate_normal(self.mean_lhs, self.cov_lhs, allow_singular=True)
+        mvnormal = multivariate_normal(
+            self.mean_lhs, self.cov_lhs, allow_singular=True
+        )
         mvnormal_rhs = multivariate_normal(
             self.mean_rhs, self.cov_rhs, allow_singular=True
         )
@@ -468,7 +476,9 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         scoreSensors_lhs = []
         for sensorInd in range(self.input_size):
             scoreSensors_lhs.append(
-                -sensorNormals_lhs[sensorInd].logpdf(error_lhs[:, sensorInd].data.cpu())
+                -sensorNormals_lhs[sensorInd].logpdf(
+                    error_lhs[:, sensorInd].data.cpu()
+                )
             )
             scoreSensors_lhs[-1] = np.repeat(
                 scoreSensors_lhs[-1], self.sequence_length
@@ -485,7 +495,9 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         scoreSensors_rhs = []
         for sensorInd in range(self.input_size):
             scoreSensors_rhs.append(
-                -sensorNormals_lhs[sensorInd].logpdf(error_lhs[:, sensorInd].data.cpu())
+                -sensorNormals_rhs[sensorInd].logpdf(
+                    error_rhs[:, sensorInd].data.cpu()
+                )
             )
             scoreSensors_rhs[-1] = np.repeat(
                 scoreSensors_rhs[-1], self.sequence_length
@@ -505,24 +517,34 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
     ):
 
         lattice_lhs = np.full((self.sequence_length, X.shape[0]), np.nan)
+        # scores_lhs = self.calc_lattice(X, scores_lhs, lattice_lhs, 'median')
         scores_lhs = self.calc_lattice(X, scores_lhs, lattice_lhs)
 
         lattice_rhs = np.full((self.sequence_length, X.shape[0]), np.nan)
+        # scores_rhs = self.calc_lattice(X, scores_rhs, lattice_rhs, 'median')
         scores_rhs = self.calc_lattice(X, scores_rhs, lattice_rhs)
 
         lattice_sensors_lhs = np.full(
             (self.sequence_length, X.shape[0], X.shape[1]), np.nan
         )
-        scoresSensors_lhs = self.calc_lattice(X, scoresSensors_lhs, lattice_sensors_lhs)
+        # scoresSensors_lhs = self.calc_lattice(X, scoresSensors_lhs,
+        # lattice_sensors_lhs, 'median')
+        scoresSensors_lhs = self.calc_lattice(
+            X, scoresSensors_lhs, lattice_sensors_lhs
+        )
 
         lattice_sensors_rhs = np.full(
             (self.sequence_length, X.shape[0], X.shape[1]), np.nan
         )
-        scoresSensors_rhs = self.calc_lattice(X, scoresSensors_rhs, lattice_sensors_rhs)
+        # scoresSensors_rhs = self.calc_lattice(X, scoresSensors_rhs,
+        # lattice_sensors_rhs, 'median')
+        scoresSensors_rhs = self.calc_lattice(
+            X, scoresSensors_rhs, lattice_sensors_rhs
+        )
 
         return scores_lhs, scores_rhs, scoresSensors_lhs, scoresSensors_rhs
 
-    def get_anomaly_values(self, X, scoresSensors_lhs, scoresSensors_rhs):
+    def get_anomaly_values_or(self, X, scoresSensors_lhs, scoresSensors_rhs):
         anomalyValues_lhs = scoresSensors_lhs.T > self.anomaly_thresholds_lhs
         anomalyValues_rhs = scoresSensors_rhs.T > self.anomaly_thresholds_rhs
 
@@ -534,11 +556,28 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         )
         return anomaly_values
 
-    def calc_lattice(self, X, data, lattice):
+    def get_anomaly_values_xor(self, X, scoresSensors_lhs, scoresSensors_rhs):
+        anomalyValues_lhs = scoresSensors_lhs.T > self.anomaly_thresholds_lhs
+        anomalyValues_rhs = scoresSensors_rhs.T > self.anomaly_thresholds_rhs
+
+        combinedAnomalyValues = np.logical_xor(anomalyValues_lhs, anomalyValues_rhs)
+        combinedAnomalyValues_Ints = np.zeros(shape=X.shape)
+        combinedAnomalyValues_Ints[combinedAnomalyValues == True] = 1
+        anomaly_values = pd.DataFrame(
+            columns=X.columns, data=combinedAnomalyValues_Ints
+        )
+        return anomaly_values
+
+    def calc_lattice(self, X, data, lattice, aggregate="mean"):
         data = np.concatenate(data)
         for i, elem in enumerate(data):
             lattice[i % self.sequence_length, i : i + self.sequence_length] = elem
-        return np.nanmean(lattice, axis=0).T
+        if aggregate == "mean":
+            return np.nanmean(lattice, axis=0).T
+        elif aggregate == "median":
+            return np.nanmedian(lattice, axis=0).T
+        else:
+            raise Exception("You must specify an aggregation method")
 
     def save(self, path):
         os.makedirs(os.path.join("./results", self.name), exist_ok=True)
@@ -581,6 +620,11 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             np.save(f, self.anomaly_thresholds_lhs)
             np.save(f, self.anomaly_thresholds_rhs)
 
+        with open(os.path.join(path, "anomalyThresholds_lhs.txt"), "w") as f:
+            np.savetxt(f, self.anomaly_thresholds_lhs)
+        with open(os.path.join(path, "anomalyThresholds_rhs.txt"), "w") as f:
+            np.savetxt(f, self.anomaly_thresholds_rhs)
+
         with open(
             os.path.join("./results", self.name, "gaussian_param.npy"), "wb"
         ) as f:
@@ -590,6 +634,29 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             np.save(f, self.cov_rhs)
             np.save(f, self.anomaly_thresholds_lhs)
             np.save(f, self.anomaly_thresholds_rhs)
+
+    def save_gaussian_tmp(self):
+        joined_path = f"tmp/{self.name}"
+        os.makedirs(os.path.join(os.getcwd(), joined_path), exist_ok=True)
+        # os.mkdir(os.path.join(os.getcwd(), joined_path))
+        with open(
+            os.path.join(os.getcwd(), joined_path, "gaussian_param.npy"), "wb"
+        ) as f:
+            np.save(f, self.mean_lhs)
+            np.save(f, self.mean_rhs)
+            np.save(f, self.cov_lhs)
+            np.save(f, self.cov_rhs)
+            np.save(f, self.anomaly_thresholds_lhs)
+            np.save(f, self.anomaly_thresholds_rhs)
+
+        with open(
+            os.path.join(os.getcwd(), joined_path, "anomalyThresholds_lhs.txt"), "w"
+        ) as f:
+            np.savetxt(f, self.anomaly_thresholds_lhs)
+        with open(
+            os.path.join(os.getcwd(), joined_path, "anomalyThresholds_rhs.txt"), "w"
+        ) as f:
+            np.savetxt(f, self.anomaly_thresholds_rhs)
 
     def load(self, path):
         model_details = torch.load(os.path.join(path, "model_detailed.pth"))
@@ -618,6 +685,33 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             self.cov_rhs = np.load(f)
             self.anomaly_thresholds_lhs = np.load(f)
             self.anomaly_thresholds_rhs = np.load(f)
+
+        # self.anomaly_thresholds_lhs = []
+        # self.anomaly_thresholds_rhs = []
+        # for mean, var in zip(self.mean_lhs, np.diagonal(self.cov_lhs)):
+        #    normdist = norm(loc=mean, scale=np.sqrt(var))
+        #    self.anomaly_thresholds_lhs.append(
+        #        -normdist.logpdf(mean + 2.5 * np.sqrt(var))
+        #    )
+        # for mean, var in zip(self.mean_rhs, np.diagonal(self.cov_rhs)):
+        #    normdist = norm(loc=mean, scale=np.sqrt(var))
+        #    self.anomaly_thresholds_rhs.append(
+        #        -normdist.logpdf(mean + 2.5 * np.sqrt(var))
+        #        #-normdist.logpdf(mean + 3.0 * np.sqrt(var))
+        #    )
+        # self.anomaly_thresholds_lhs = []
+        # self.anomaly_thresholds_rhs = []
+        # for mean, var in zip(self.mean_lhs, np.diagonal(self.cov_lhs)):
+        #    normdist = norm(loc=mean, scale=np.sqrt(var))
+        #    self.anomaly_thresholds_lhs.append(
+        #        -normdist.logpdf(mean + 2.5 * np.sqrt(var))
+        #    )
+        # for mean, var in zip(self.mean_rhs, np.diagonal(self.cov_rhs)):
+        #    normdist = norm(loc=mean, scale=np.sqrt(var))
+        #    self.anomaly_thresholds_rhs.append(
+        #        -normdist.logpdf(mean + 1.6 * np.sqrt(var))
+        #    )
+        # import pdb; pdb.set_trace()
 
     def createLatentVideo(self, encodings_lhs, encodings_rhs, outputs_rhs, sequences):
         # save in folder 'latentVideos' with timestamp?
@@ -723,9 +817,9 @@ class ACEModule(nn.Module, PyTorchUtils):
         # creates powers of two between eight and the next smaller power from the input_length
         dec_steps = (
             2
-            ** np.arange(max(np.ceil(np.log2(hidden_size1)), 2), np.log2(input_length))[
-                1:
-            ]
+            ** np.arange(
+                max(np.ceil(np.log2(hidden_size1)), 2), np.log2(input_length)
+            )[1:]
         )
         dec_setup = np.concatenate(
             [[hidden_size1], dec_steps.repeat(2), [input_length]]
@@ -763,9 +857,9 @@ class ACEModule(nn.Module, PyTorchUtils):
         # creates powers of two between eight and the next smaller power from the input_length
         dec_steps = (
             2
-            ** np.arange(max(np.ceil(np.log2(hidden_size2)), 2), np.log2(input_length))[
-                1:
-            ]
+            ** np.arange(
+                max(np.ceil(np.log2(hidden_size2)), 2), np.log2(input_length)
+            )[1:]
         )
         dec_setup = np.concatenate(
             [[hidden_size2], dec_steps.repeat(2), [input_length]]
