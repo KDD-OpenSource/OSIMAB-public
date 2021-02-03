@@ -1,17 +1,30 @@
 import numpy as np
 import time
+import yaml
+from box import Box
 import logging
+import copy
 
 from src.datasets import OSIMABDataset
+from src.datasets import OSIMABDatasetSmall
 from src.evaluation import Evaluator
 from src.algorithms import AutoEncoder
 from src.algorithms import LSTMEDP
 from src.algorithms import LSTMED
-from src.algorithms import AutoEncoderJO
+from src.algorithms import ACE
 from src.algorithms import AutoCorrelationEncoder
 from src.evaluation.config import init_logging
+from src.utils import (
+    detectors,
+    load_different_sensor_models,
+    load_same_sensor_models,
+    load_sensor_models,
+    clean_trainsets_by_whitelist,
+    getIntersectedSensors,
+)
 from config import config
 from functools import reduce
+import pathos.multiprocessing as mp
 import random
 import pandas as pd
 import gc
@@ -21,139 +34,138 @@ import os
 from pprint import pprint
 
 
-import random
-
-
-def detectors(seed, cfg, name=None):
-    # Reading config
-    if name is None:
-        regexpName = str(cfg.dataset.regexp_sensor).replace("'", "")
-        name = f"AutoencoderJO_{regexpName}"
-    dets = [
-        AutoEncoderJO(
-            name=name,
-            num_epochs=cfg.epoch,
-            hidden_size1=cfg.ace.hiddenSize1,
-            hidden_size2=cfg.ace.hiddenSize2,
-            lr=cfg.ace.LR,
-            sequence_length=cfg.ace.seq_len,
-            details=cfg.ace.details,
-            latentVideo=False,
-            train_max=cfg.ace.train_max,
-            sensor_specific=cfg.ace.sensor_spec_loss,
-            corr_loss=cfg.ace.corr_loss,
-            seed=seed,
-        )
-    ]
-
-    return sorted(dets, key=lambda x: x.framework)
-
-
 def main():
-    evaluate_osimab_jo()
+    cfg = get_config()
+    evaluators = evaluate_osimab_jo(cfg)
+    #join_evaluations(evaluators)
 
 
-def remove_files(files_blocklist, filenames, pathnames, cfg):
-    for filename in files_blocklist:
-        if filename in filenames:
-            filenames.remove(filename)
-        if os.path.join(cfg.dataset.data_dir, filename) in pathnames:
-            pathnames.remove(os.path.join(cfg.dataset.data_dir, filename))
-    return filenames, pathnames
-
-
-def evaluate_osimab_jo():
+def evaluate_osimab_jo(cfg):
     seed = np.random.randint(1000)
-    files_blocklist = get_blocklist()
-    cfgs = get_configs()
-    for cfg in cfgs:
-        # Load data
-        if "DailyPrediction" not in cfg.ctx:
-            output_dir, logger = get_logger(cfg)
+    # Load data
+    output_dir, logger = get_logger(cfg)
 
-        if cfg.dataset.regexp_bin_train is not None:
-            datasets_train = get_datasets_train(cfg, files_blocklist)
-            # check lengths
-            intersected_sensors = getIntersectedSensors(
-                [dataset.name + ".csv" for dataset in datasets_train],
-                cfg.dataset.regexp_sensor,
-            )
-            logger.info(
-                f"""
-                    Training on sensors {intersected_sensors} with datasets
-                    given by {datasets_train}"""
-            )
+    if cfg.osimab_crossval == True:
+        evaluators = eval_osimab_crossval(seed, cfg, output_dir)
+        return evaluators
 
-        if cfg.dataset.regexp_bin_test is not None:
-            datasets_test = get_datasets_test(cfg)
-        if cfg.ace.load_file is not None:
-            models = load_models(cfg, seed)
-        else:
-            models = add_train_models(
-                cfg, datasets_train, seed, output_dir, logger, intersected_sensors
-            )
-        # Evaluate model
-        dets = models
-        predict_testsets(datasets_test, dets, output_dir, seed, cfg)
+    # train and/or get models
+    model_types = cfg.models
+    models = []
+    if "train" in cfg.modeFlg:
+        models.extend(train_models(seed, cfg, output_dir, logger))
+    for model_type in model_types:
+        if (model_type in cfg.model and cfg.model[model_type].load_file is not
+                None):
+            models.extend(load_different_sensor_models(cfg, seed))
+
+    evaluators = []
+    if "test" in cfg.modeFlg:
+        evaluators.append(test_models(seed, cfg, output_dir, models))
 
 
-def getIntersectedSensors(filenames_train, regexp_sensor):
-    cwd = os.getcwd()
 
-    sensor_lists = []
-    os.chdir("files_sensors")
-    for sensor_list_file in filenames_train:
-        sensor_list_pd = pd.read_csv(sensor_list_file)
-        sensor_list_pd = sensor_list_pd[
-            -sensor_list_pd.iloc[:, 1].str.contains(r".*essrate.*")
-        ].iloc[:, 1]
-        sensor_list_pd = sensor_list_pd[-sensor_list_pd.str.contains(r".*WIM.*")]
-        sensor_list_pd = sensor_list_pd[-sensor_list_pd.str.contains(r".*Kanal.*")]
-        if sensor_list_pd.shape[0] < 50:
-            print(sensor_list_file)
-            import pdb
+def eval_osimab_crossval(seed, cfg, output_dir):
+    datasets_tot = get_datasets_train_osimab_small(cfg)
+    intersected_sensors = getIntersectedSensors(cfg, datasets_tot)
+    import pdb; pdb.set_trace()
 
-            pdb.set_trace()
-        for regexp_s in regexp_sensor:
-            sensor_list_pd = sensor_list_pd[sensor_list_pd.str.contains(regexp_s)]
-        sensor_lists.append(list(sensor_list_pd))
+    # get arguments
+    arg_list = []
+    for dataset_test_ind in range(len(datasets_tot)):
+        dataset_test = datasets_tot[dataset_test_ind]
+        datasets_train = (
+            datasets_tot[:dataset_test_ind] + datasets_tot[dataset_test_ind + 1 :]
+        )
+        arg_list.append((cfg, seed, datasets_train, dataset_test, output_dir))
 
-    intersected_sensors = []
+    # process parallel
+    results = []
+    evaluators = []
+    pool = mp.Pool(int(mp.cpu_count()))
+    for arguments in arg_list:
+        results.append(pool.apply_async(cross_val_async, args=arguments))
+    pool.close()
+    pool.join()
+    for result in results:
+        evaluators.append(result.get())
+    return evaluators
 
-    for sensor_list in sensor_lists:
-        intersected_sensors.append(sensor_list)
 
-    intersected_sensors = list(
-        reduce(set.intersection, [set(item) for item in intersected_sensors])
+def train_models(seed, cfg, output_dir, logger):
+    models = []
+    datasets_train = get_datasets_train(cfg)
+    intersected_sensors = getIntersectedSensors(cfg, datasets_train)
+    logger.info(
+        f"""
+            Training on sensors {intersected_sensors} with datasets
+            given by {datasets_train}"""
     )
-    os.chdir(cwd)
-
-    if len(intersected_sensors) == 0:
-        raise Exception("You have no sensors to train on")
-
-    return intersected_sensors
-
-
-def get_blocklist():
-    files_blocklist = [
-        "OSIMAB_2020_08_18_13_49_51.bin.zip",
-        "OSIMAB_2020_12_09_18_55_19.bin.zip",
-        "OSIMAB_2020_12_08_12_39_54.bin.zip",
-        "OSIMAB_2020_12_09_19_16_10.bin.zip",
-        "OSIMAB_2020_12_09_19_11_27.bin.zip",
-        "OSIMAB_2020_10_07_09_37_37.bin.zip",
-    ]
-    return files_blocklist
+    model_name = cfg.models[0] + '_' + cfg.dataset_type[0]
+    models.extend(
+        add_train_models(
+            cfg,
+            datasets_train,
+            seed,
+            output_dir,
+            intersected_sensors,
+            logger=logger,
+            name=model_name
+        )
+    )
+    return models
 
 
-def get_configs():
-    cfgs = []
+def test_models(seed, cfg, output_dir, models):
+    if len(models) == 0:
+        raise Exception("No models were specified (neither trained nor loaded)")
+    if cfg.datasets.osimabSmall == True:
+        datasets_test = get_datasets_test_osimab_small(cfg)
+    else:
+        datasets_test = get_datasets_test(cfg)
+    evaluator_res = predict_testsets(datasets_test, models, output_dir, seed, cfg)
+    return evaluator_res
 
-    for file_name in os.listdir("./configs"):
-        if file_name.endswith(".yaml"):
-            cfgs.append(config(external_path=os.path.join("./configs/", file_name)))
-    return cfgs
 
+def cross_val_async(cfg, seed, datasets_train, dataset_test, output_dir):
+    models = []
+    if "train" in cfg.modeFlg:
+        intersected_sensors = getIntersectedSensors(cfg, datasets_train)
+        name = cfg.model.type[0] + "_" + str(dataset_test)[-6:-4]
+        models.extend(
+            add_train_models(
+                cfg, datasets_train, seed, output_dir, intersected_sensors, name=name
+            )
+        )
+
+    if cfg.model.load_file is not None:
+        models.extend(load_same_sensor_models(cfg, seed))
+
+    if "test" in cfg.modeFlg:
+        evaluator_res = test_cross_val_async(
+            seed, cfg, output_dir, models, dataset_test
+        )
+        return evaluator_res
+    return None
+
+
+def test_cross_val_async(seed, cfg, output_dir, models, dataset_test):
+    if len(models) == 0:
+        raise Exception("No models were specified (neither trained nor loaded)")
+    datasets_test = [dataset_test]
+    # choose right model
+    for model in models:
+        if model.name[-2:] in dataset_test.name[-7:]:
+            right_model = model
+    models = [right_model]
+    evaluator_res = predict_testsets(datasets_test, models, output_dir, seed, cfg)
+    return evaluator_res
+
+
+def get_config():
+    cfg = config(external_path=sys.argv[1])
+    cfg = Box(cfg.config_dict)
+    return cfg 
 
 def get_logger(cfg):
     timestamp = time.strftime("%Y-%m-%d-%H%M%S")
@@ -164,41 +176,46 @@ def get_logger(cfg):
     return output_dir, logger
 
 
-def get_datasets_train(cfg, files_blocklist):
+def get_datasets_train(cfg):
+    train_datasets_type = cfg.dataset_type
+    if cfg.dataset_type == ['osimabSmall']:
+        return get_datasets_train_osimab_small(cfg)
+    if cfg.dataset_type == ['osimabLarge']:
+        return get_datasets_train_osimab_large(cfg)
+
+
+def get_datasets_train_osimab_large(cfg):
+    if cfg.dataset.osimabLarge.regexp_bin_train == None:
+        raise Exception("You specified to train yet provided no regexp dataset")
+
     datasets_train = []
     pathnames_train = []
-    for regexp_bin in cfg.dataset.regexp_bin_train:
-        pathnamesRegExp = os.path.join(cfg.dataset.data_dir, regexp_bin)
+    for regexp_bin in cfg.datasets.regexp_bin_train:
+        pathnamesRegExp = os.path.join(cfg.datasets.data_dir, regexp_bin)
         pathnames_train += glob.glob(pathnamesRegExp)
     filenames_train = [os.path.basename(pathname) for pathname in pathnames_train]
-    filenames_train, pathnames_train = remove_files(
-        files_blocklist, filenames_train, pathnames_train, cfg
-    )
-    print("Used binfiles for training:")
-    pprint(filenames_train)
+
     datasets_train = [
         OSIMABDataset(cfg, file_name=filename) for filename in pathnames_train
     ]
 
-    to_be_removed = []
-    with open(
-        os.path.join(os.getcwd(), "tmp", "whiteList.txt"), "r"
-    ) as whitelist_file:
-        whitelist = whitelist_file.readlines()
-        whitelistStripped = [name.strip() for name in whitelist]
-        for elem in datasets_train:
-            if elem.name not in whitelistStripped:
-                to_be_removed.append(elem)
-    for dataset_train in to_be_removed:
-        datasets_train.remove(dataset_train)
+    datasets_train = clear_trainsets_by_whitelist(datasets_train)
+    print("Used binfiles for training:")
+    pprint(filenames_train)
+    return datasets_train
+
+
+def get_datasets_train_osimab_small(cfg):
+    osimabDatasetSmall = OSIMABDatasetSmall(cfg)
+    datasets_train = osimabDatasetSmall.training_datasets
     return datasets_train
 
 
 def get_datasets_test_by_day(cfg):
     datasets_test = []
     pathnames_test = []
-    for regexp_bin in cfg.dataset.regexp_bin_test:
-        pathnamesRegExp = os.path.join(cfg.dataset.data_dir, regexp_bin)
+    for regexp_bin in cfg.datasets.regexp_bin_test:
+        pathnamesRegExp = os.path.join(cfg.datasets.data_dir, regexp_bin)
         pathnames_test += glob.glob(pathnamesRegExp)
     filenames_test = [os.path.basename(pathname) for pathname in pathnames_test]
     all_days = list(set(map(lambda x: x[:17], filenames_test)))
@@ -224,9 +241,10 @@ def get_datasets_test_by_day(cfg):
 
 
 def get_datasets_test(cfg):
+
     pathnames_test = []
-    for regexp_bin in cfg.dataset.regexp_bin_test:
-        pathnamesRegExp = os.path.join(cfg.dataset.data_dir, regexp_bin)
+    for regexp_bin in cfg.datasets.regexp_bin_test:
+        pathnamesRegExp = os.path.join(cfg.datasets.data_dir, regexp_bin)
         pathnames_test += glob.glob(pathnamesRegExp)
     filenames_test = [os.path.basename(pathname) for pathname in pathnames_test]
 
@@ -239,48 +257,33 @@ def get_datasets_test(cfg):
     return datasets_test
 
 
-def load_models(cfg, seed):
-    models = []
-    total_sensors = []
-    single_sensors = []
-    for path in cfg.ace.load_file:
-        modelName = path[path.rfind("/") + 1 :]
-        models.append(detectors(seed, cfg, name=modelName)[0])
-        models[-1].load(path)
-        total_sensors.extend(models[-1].sensor_list)
-        single_sensors.append(models[-1].sensor_list)
-        # check if different models have the same sensor
-    if sum(map(lambda x: len(set(x)), single_sensors)) != len(set(total_sensors)):
-        raise Exception("You try to combine models which share sensors.")
-    return models
+def get_datasets_test_osimab_small(cfg):
+    osimabDatasetSmall = OSIMABDatasetSmall(cfg)
+    datasets_test = osimabDatasetSmall.training_datasets
+    return datasets_test
 
 
 def add_train_models(
-    cfg, datasets_train, seed, output_dir, logger, intersected_sensors
+    cfg, datasets_train, seed, output_dir, intersected_sensors, name=None, logger=None
 ):
     models = []
-    save_counter = 1
-    models.append(detectors(seed, cfg)[0])
+    models.append(detectors(seed, cfg, name)[0])
     while len(datasets_train) != 0:
         # for dataset_train in datasets_train:
-        logger.info(
-            f"Training {models[-1].name} on {datasets_train[0].name} with seed {seed}"
-        )
+        if logger is not None:
+            logger.info(
+                f"Training {models[-1].name} on {datasets_train[0].name} with seed {seed}"
+            )
         X_train = datasets_train[0].data(sensor_list=intersected_sensors)[0]
-        models[-1].fit(X_train, path=None)
-        # dataset_train.free_space()I
+        models[-1].fit(X_train)
         datasets_train[0]._data = None
-        # here I am not sure whether we freed the space everywhere!
         gc.collect()
         datasets_train.pop(0)
 
-        if save_counter % 3 == 0:
-            print("saving model")
-            for model in models:
-                model_dir = os.path.join(output_dir, f"model_{model.name}")
-                os.makedirs(model_dir, exist_ok=True)
-                model.save(model_dir)
-        save_counter = save_counter + 1
+        for model in models:
+            model_dir = os.path.join(output_dir, f"model_{model.name}")
+            os.makedirs(model_dir, exist_ok=True)
+            model.save(model_dir)
     return models
 
 
@@ -298,10 +301,6 @@ def predict_test_days(test_days, dets, output_dirs, seed, cfg):
         else:
             raise Exception("You should specify an output folder")
         evaluator.evaluate()
-        result = evaluator.benchmarks()
-        evaluator.plot_roc_curves()
-        evaluator.plot_threshold_comparison()
-        evaluator.plot_scores()
 
 
 def predict_testsets(datasets_test, dets, output_dir, seed, cfg):
@@ -314,10 +313,7 @@ def predict_testsets(datasets_test, dets, output_dir, seed, cfg):
         create_log_file=cfg.log_file,
     )
     evaluator.evaluate()
-    # result = evaluator.benchmarks()
-    # evaluator.plot_roc_curves()
-    # evaluator.plot_threshold_comparison()
-    # evaluator.plot_scores()
+    return evaluator
 
 
 if __name__ == "__main__":

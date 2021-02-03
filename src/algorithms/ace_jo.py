@@ -17,10 +17,10 @@ from itertools import product
 from .algorithm_utils import Algorithm, PyTorchUtils
 
 
-class AutoEncoderJO(Algorithm, PyTorchUtils):
+class ACE(Algorithm, PyTorchUtils):
     def __init__(
         self,
-        name: str = "AutoEncoderJO",
+        name: str = "ACE",
         num_epochs: int = 10,
         batch_size: int = 20,
         lr: float = 1e-4,
@@ -35,6 +35,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         train_max=None,
         sensor_specific=True,
         corr_loss=True,
+        aggr_func="xor",
     ):
         Algorithm.__init__(self, __name__, name, seed, details=details)
         PyTorchUtils.__init__(self, seed, gpu)
@@ -43,6 +44,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         self.lr = lr
         self.sensor_specific = sensor_specific
         self.compute_corr_loss = corr_loss
+        self.aggr_func = aggr_func
         self.input_size = None
         self.sensor_list = None
         self.hidden_size1 = hidden_size1
@@ -56,6 +58,8 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         self.anomaly_values_or = None
         self.anomaly_values_xor = None
 
+        self.window_anomaly = True
+
         self.encoding_details = {}
 
         self.aed = None
@@ -63,7 +67,8 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         self.mean_rhs, self.var_rhs, self.cov_rhs = None, None, None
         self.used_error_vects = 0
 
-    def fit(self, X: pd.DataFrame, path):
+    def fit(self, X: pd.DataFrame, path=None):
+        # torch.set_num_threads(1)
         # Data preprocessing
         X, sequences = self.data_preprocessing(X)
         train_ace_ind, train_gaussian_ind = self.get_random_indices(len(sequences))
@@ -168,7 +173,7 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             latentSpace = np.vstack(
                 list(map(lambda x: x.detach().numpy(), latentSpace))
             )
-            self.printIntermedResults(epoch, epochLossLhs, epochLossRhs, latentSpace)
+            #self.printIntermedResults(epoch, epochLossLhs, epochLossRhs, latentSpace)
 
     def initTradeoff(self):
         alpha = 1
@@ -213,8 +218,6 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         root_sum_sqr_err = torch.sqrt(sum_sqr_err)
         sqr_sum_sqr_err = sum_sqr_err ** 2
         return root_sum_sqr_err
-        # return sqr_sum_sqr_err
-        # return sum_sqr_err
 
     def corr_loss(self, yhat, y):
         subclassLength = self.hidden_size1
@@ -267,7 +270,8 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         self.used_error_vects += error_lhs.size()[0]
 
     def update_gaussians_one_side(self, errors, mean, cov):
-        errors = errors.reshape(-1, self.input_size)
+        if len(errors.shape) > 1:
+            errors = errors.reshape(-1, self.input_size)
         errors = errors.data.cpu().numpy()
         if mean is None or cov is None:
             mean = np.mean(errors, axis=0)
@@ -281,8 +285,16 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
                 cov_dim = cov.shape[0]
             summedcov_new = np.empty(shape=(cov.shape))
             for error in errors:
+                try:
+                    error[0]
+                except:
+                    error = error[np.newaxis]
+                try:
+                    mean[0]
+                    mean_old = mean
+                except:
+                    mean_old=mean[np.newaxis]
                 # Mean Calculation
-                mean_old = mean
                 numErrorsAfterUpdate = self.used_error_vects + localErrorCount + 1
                 mean_new = (
                     1
@@ -305,6 +317,23 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         return mean, cov
 
     def predict(self, X: pd.DataFrame) -> np.array:
+        # changes to be made:
+        # now we can generate an anomaly_value for each time window
+        # instead of averaging the scores we can compare each timewindow
+        # against the threshold
+        # then we can take either max of all anomaly pred. as prediction
+        # (everything that is an anomaly by just one timewindow will be an
+        # anomaly)' or we can do something like a majority vote on if a
+        # timestep is an anomaly
+
+        # more importantly we need to handle the dimensions (I cannot have
+        # multiple anomalies anymore... The output changes substantially (and
+        # maybe I need to touch other code as well) -> better: just add the new
+        # type of anomaly_result on top! (maybe I should have done this before
+        # as well?!) Can I just calculate both results simultaneously? (let
+        # calc_errors return the raw error and the aggregated one?)
+
+
         self.aed.eval()
         X, sequences = self.data_preprocessing(X)
         if list(X.columns) != self.sensor_list:
@@ -327,6 +356,9 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             sensorNormals_rhs,
         ) = self.set_gaussians()
 
+#        if self.window_anomaly == False:
+#            scores = self.predict_sensor_anomaly(data_loader, mvnormal,
+#                    mvnormal_rhs, sensorNormals_lhs, sensor_Normals_rhs)
         scores_lhs = []
         scores_rhs = []
         scoresSensors_lhs = []
@@ -338,6 +370,9 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         errors_lhs = []
         errors_rhs = []
 
+
+        if self.window_anomaly == False:
+            scores = self.predict_sensor_anomaly()
         for idx, ts in enumerate(data_loader):
             output = self.aed(self.to_var(ts), return_latent=True)
             error_lhs, error_rhs = self.calc_errors(ts, output)
@@ -386,22 +421,33 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         self.anomaly_values_xor = self.get_anomaly_values_xor(
             X, scoresSensors_lhs, scoresSensors_rhs
         )
+
+        if self.aggr_func == "or":
+            self.anomaly_values = self.anomaly_values_or
+        elif self.aggr_func == "xor":
+            self.anomaly_values = self.anomaly_values_xor
+        else:
+            raise Exception("No aggr function for ace model defined.")
+
         anomaly_values_lhs = (scoresSensors_lhs.T > self.anomaly_thresholds_lhs).T
         anomaly_values_rhs = (scoresSensors_rhs.T > self.anomaly_thresholds_rhs).T
         # self.anomaly_values_xor = anomaly_values_lhs ^ anomaly_values_rhs
 
         if self.details:
+            # self.prediction_details.update(
+            #    {"anomaly_values": self.anomaly_values.values.T}
+            # )
             self.prediction_details.update(
-                {"anomaly_values": self.anomaly_values_or.values.T}
+                {"anomaly_values_or": self.anomaly_values_or.values.T}
+            )
+
+            # New
+            self.prediction_details.update(
+                {"anomaly_values_xor": self.anomaly_values_xor.values.T}
             )
 
             self.prediction_details.update({"anomaly_values_lhs": anomaly_values_lhs})
             self.prediction_details.update({"anomaly_values_rhs": anomaly_values_rhs})
-
-            # New
-            self.prediction_details.update(
-                {"anomaly_values_diff": self.anomaly_values_xor.values.T}
-            )
 
             self.prediction_details.update({"scoresSensors_lhs": scoresSensors_lhs})
             self.prediction_details.update({"scoresSensors_rhs": scoresSensors_rhs})
@@ -451,13 +497,43 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
             sensorNormals_rhs.append(norm(loc=mean, scale=np.sqrt(var)))
         return mvnormal, mvnormal_rhs, sensorNormals_lhs, sensorNormals_rhs
 
-    def calc_errors(self, ts, output):
-        error_lhs = nn.L1Loss(reduction="none")(
-            output[0], self.to_var(ts.float())
-        ).mean(axis=1)
-        error_rhs = nn.L1Loss(reduction="none")(
-            output[1].view(output[2].shape), output[2]
-        ).mean(axis=2)
+    def calc_errors(self, ts, output, loss_type = 'MSE'):
+        # loss_type changes the applied lossfunction
+        # self.window_anomaly distinguishes whether we average over just the
+        # timewindow
+        # (resulting in an error of size (batch_size, numsensors)) or whether
+        # we average over the entire error (resulting in an error of size
+        # (batchsize))
+
+        if loss_type == 'L1' and self.window_anomaly == True:
+            error_lhs = nn.L1Loss(reduction="none")(
+                output[0], self.to_var(ts.float())
+            ).mean(dim=(1,2))
+            error_rhs = nn.L1Loss(reduction="none")(
+                output[1].view(output[2].shape), output[2]
+            ).mean(dim=(1,2))
+        if loss_type == 'L1' and aggr_sensor == False:
+            error_lhs = nn.L1Loss(reduction="none")(
+                output[0], self.to_var(ts.float())
+            ).mean(dim=(1))
+            error_rhs = nn.L1Loss(reduction="none")(
+                output[1].view(output[2].shape), output[2]
+            ).mean(dim=(2))
+        if loss_type == 'MSE' and self.window_anomaly == True:
+            error_lhs = nn.MSELoss(reduction="none")(
+                output[0], self.to_var(ts.float())
+            ).mean(dim=(1,2))
+            error_rhs = nn.MSELoss(reduction="none")(
+                output[1].view(output[2].shape), output[2]
+            ).mean(dim=(1,2))
+        if loss_type == 'MSE' and aggr_sensor == False:
+            error_lhs = nn.MSELoss(reduction="none")(
+                output[0], self.to_var(ts.float())
+            ).mean(dim=(1))
+            error_rhs = nn.MSELoss(reduction="none")(
+                output[1].view(output[2].shape), output[2]
+            ).mean(dim=(2))
+
 
         return error_lhs, error_rhs
 
@@ -711,7 +787,6 @@ class AutoEncoderJO(Algorithm, PyTorchUtils):
         #    self.anomaly_thresholds_rhs.append(
         #        -normdist.logpdf(mean + 1.6 * np.sqrt(var))
         #    )
-        # import pdb; pdb.set_trace()
 
     def createLatentVideo(self, encodings_lhs, encodings_rhs, outputs_rhs, sequences):
         # save in folder 'latentVideos' with timestamp?

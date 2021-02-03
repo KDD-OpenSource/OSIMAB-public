@@ -8,12 +8,13 @@ import sys
 sys.path.append("../../")
 import traceback
 from textwrap import wrap
-from src.algorithms import AutoEncoderJO
+from src.algorithms import ACE
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as path_effects
 from matplotlib.font_manager import FontProperties
 from itertools import product
 import numpy as np
+import random
 import pandas as pd
 import progressbar
 import time
@@ -49,27 +50,38 @@ class Evaluator:
         self._detectors = detectors
         self.create_log_file = create_log_file
         self.output_dir = output_dir or "reports"
-        if "PredictionResults" not in self.output_dir:
-            timestamp = time.strftime("%Y-%m-%d-%H%M%S")
-            run_dir = timestamp
-            if cfg is not None and hasattr(cfg, "ctx"):
-                run_dir += f"_{cfg.ctx}_test"
-            self.output_dir = os.path.join(self.output_dir, run_dir)
-            self.results = dict()
-            init_logging(os.path.join(self.output_dir, "logs"))
-            if cfg is not None:
-                with open(
-                    os.path.join(self.output_dir, "config.yaml"), "w"
-                ) as cfg_file:
-                    yaml.dump(cfg.config_dict, cfg_file)
-            self.logger = logging.getLogger(__name__)
-        else:
-            self.results = dict()
-        # Dirty hack: Is set by the main.py to insert results from multiple evaluator runs
         self.benchmark_results = None
-        # Last passed seed value in evaluate()
         self.seed = seed
         self.cfg = cfg
+        if "PredictionResults" not in self.output_dir:
+            self.prepare_reports()
+        else:
+            self.results = dict()
+
+    def prepare_reports(self):
+        timestamp = time.strftime("%Y-%m-%d-%H%M%S")
+        folder_counter = 0
+        run_dir = timestamp + "_" + str(os.getpid())
+        if self.cfg is not None and hasattr(self.cfg, "ctx"):
+            run_dir += f"_{self.cfg.ctx}_test"
+        self.output_dir = os.path.join(self.output_dir, run_dir)
+        init_logging(os.path.join(self.output_dir, "logs"))
+
+        path = os.path.join(self.output_dir, f"info.txt")
+        with open(path, "w") as info_file:
+            for dataset in self.datasets:
+                info_file.write(dataset.name)
+                info_file.write("\n")
+            info_file.write("\n")
+            for detector in self.detectors:
+                info_file.write(detector.name)
+                info_file.write("\n")
+
+        self.results = dict()
+        if self.cfg is not None:
+            with open(os.path.join(self.output_dir, "config.yaml"), "w") as cfg_file:
+                yaml.dump(self.cfg.config_dict, cfg_file)
+        self.logger = logging.getLogger(__name__)
 
     @property
     def detectors(self):
@@ -172,97 +184,80 @@ class Evaluator:
             return threshold[np.argmax(f_score)]
 
     def evaluate(self):
-        parallel = True
+        parallel = False
         if parallel:
-            anomaly_values_loc = []
-            # arg_list = []
-
-            for ds in progressbar.progressbar(self.datasets):
-                arg_list = []
-                for det in self.detectors:
-                    arg_list.append((det, ds))
-
-                pool = mp.Pool(mp.cpu_count())
-                for arguments in arg_list:
-                    anomaly_values_loc.append(
-                        pool.apply_async(self.predict_async, args=arguments)
-                    )
-                pool.close()
-                pool.join()
-
-            if "or" in self.cfg.aggrFunc:
-                anomaly_values_or = pd.DataFrame()
-                for anomaly_value_loc in anomaly_values_loc:
-                    anomaly_values_or = pd.concat(
-                        [anomaly_values_or, anomaly_value_loc.get()[0]]
-                    )
-                anomaly_values_or = pd.DataFrame(anomaly_values_or.mean()).transpose()
-                self.store_csv(anomaly_values_or, f"aggregated_anomalies_or")
-
-            if "xor" in self.cfg.aggrFunc:
-                anomaly_values_xor = pd.DataFrame()
-                for anomaly_value_loc in anomaly_values_loc:
-                    anomaly_values_xor = pd.concat(
-                        [anomaly_values_xor, anomaly_value_loc.get()[1]]
-                    )
-                    anomaly_values_xor = pd.DataFrame(
-                        anomaly_values_xor.mean()
-                    ).transpose()
-                    self.store_csv(anomaly_values_xor, f"aggregated_anomalies_xor")
-
-            for anomaly_value_loc in anomaly_values_loc:
-                self.results.update(anomaly_value_loc.get()[2])
+            anomaly_values = self.calc_anomaly_values_parallel()
+            self.store_aggregated_anomalies(anomaly_values, f"aggregated_anomalies")
 
         else:
-            anomaly_values_or = pd.DataFrame()
-            anomaly_values_xor = pd.DataFrame()
-            for det in progressbar.progressbar(self.detectors):
-                for ds in progressbar.progressbar(self.datasets):
-                    (X_train, y_train, X_test, y_test) = ds.data(det.sensor_list)
-                    if self.create_log_file:
-                        self.logger.info(
-                            f"Testing {det.name} on {ds.name} with seed {self.seed}"
-                        )
+            anomaly_values = self.calc_anomaly_values()
+            self.store_aggregated_anomalies(anomaly_values, f"aggregated_anomalies")
+        self.anomaly_values = anomaly_values
+
+
+    def calc_anomaly_values_parallel(self):
+        anomaly_values_loc = []
+
+        for ds in progressbar.progressbar(self.datasets):
+            arg_list = []
+            for det in self.detectors:
+                arg_list.append((det, ds))
+
+            pool = mp.Pool(mp.cpu_count())
+            for arguments in arg_list:
+                anomaly_values_loc.append(
+                    pool.apply_async(self.predict_async, args=arguments)
+                )
+            pool.close()
+            pool.join()
+
+        anomaly_values = pd.DataFrame()
+        for anomaly_value_loc in anomaly_values_loc:
+            anomaly_values = pd.concat(
+                # [anomaly_values, anomaly_value_loc.get()[0]]
+                [anomaly_values, anomaly_value_loc.get()]
+            )
+        anomaly_values = pd.DataFrame(anomaly_values.mean()).transpose()
+
+        # for anomaly_value_loc in anomaly_values_loc:
+        # self.results.update(anomaly_value_loc.get()[1])
+        return anomaly_values
+
+    def calc_anomaly_values(self):
+        anomaly_values = pd.DataFrame()
+        # anomaly_values_or = pd.DataFrame()
+        # anomaly_values_xor = pd.DataFrame()
+        for det in progressbar.progressbar(self.detectors):
+            for ds in progressbar.progressbar(self.datasets):
+                (X_train, y_train, X_test, y_test) = ds.data(det.sensor_list)
+                if self.create_log_file:
+                    self.logger.info(
+                        f"Testing {det.name} on {ds.name} with seed {self.seed}"
+                    )
+                try:
+                    score = det.predict(X_test.copy())
+                    self.results[(ds.name, det.name)] = score
+                    anomaly_values = pd.concat(
+                        [
+                            anomaly_values,
+                            self.aggregate_anomaly_values(det, ds),
+                        ]
+                    ).mean()
+                    anomaly_values = pd.DataFrame(anomaly_values).transpose()
                     try:
-                        score = det.predict(X_test.copy())
-                        self.results[(ds.name, det.name)] = score
-                        if "or" in self.cfg.aggrFunc:
-                            anomaly_values_or = pd.concat(
-                                [
-                                    anomaly_values_or,
-                                    self.aggregate_anomaly_values_or(det, ds),
-                                ]
-                            ).mean()
-                            anomaly_values_or = pd.DataFrame(
-                                anomaly_values_or
-                            ).transpose()
-                        if "xor" in self.cfg.aggrFunc:
-                            anomaly_values_xor = pd.concat(
-                                [
-                                    anomaly_values_xor,
-                                    self.aggregate_anomaly_values_xor(det, ds),
-                                ]
-                            ).mean()
-                            anomaly_values_xor = pd.DataFrame(
-                                anomaly_values_xor
-                            ).transpose()
-                        try:
-                            self.plot_details(det, ds, score)
-                        except Exception:
-                            pass
-                    except Exception as e:
-                        if self.create_log_file:
-                            self.logger.error(
-                                f"An exception occurred while testing {det.name} on {ds}: {e}"
-                            )
-                            self.logger.error(traceback.format_exc())
-                        self.results[(ds.name, det.name)] = np.zeros_like(y_test)
-                    ds._data = None
-                    gc.collect()
-            if "or" in self.cfg.aggrFunc:
-                self.store_csv(anomaly_values_or, f"aggregated_anomalies_or")
-            if "xor" in self.cfg.aggrFunc:
-                self.store_csv(anomaly_values_xor, f"aggregated_anomalies_xor")
+                        self.plot_details(det, ds, score)
+                    except Exception:
+                        print("could not plot details")
+                except Exception as e:
+                    if self.create_log_file:
+                        self.logger.error(
+                            f"An exception occurred while testing {det.name} on {ds}: {e}"
+                        )
+                        self.logger.error(traceback.format_exc())
+                    self.results[(ds.name, det.name)] = np.zeros_like(y_test)
+                ds._data = None
+                gc.collect()
+        return anomaly_values
 
     def benchmarks(self) -> pd.DataFrame:
         df = pd.DataFrame()
@@ -470,7 +465,8 @@ class Evaluator:
         for value in det.prediction_details.values():
             grid += 1 if value.ndim == 1 else value.shape[0]
         grid += X_test.shape[1]  # data
-        grid += 1 + 1 + 1 + 1  # score, gt and 2* prediction
+        # grid += 1 + 1 + 1 + 1  # score, gt and 2* prediction
+        grid += 1 + 1 + 1  # score, gt and prediction
 
         fig, axes = plt.subplots(grid, 1, figsize=(15, 1.5 * grid))
 
@@ -490,32 +486,42 @@ class Evaluator:
         i += 1
         c = cmap(i / grid)
 
-        axes[i].set_title("predicted anomaly values or")
-        axes[i].plot(det.anomaly_values_or.sum(axis=1).values, color=c)
+        axes[i].set_title("predicted anomaly values sum")
+        axes[i].plot(det.anomaly_values.sum(axis=1).values, color=c)
         i += 1
-        axes[i].set_title("predicted anomaly values xor")
-        axes[i].plot(det.anomaly_values_xor.sum(axis=1).values, color=c)
-        i += 1
+        # axes[i].set_title("predicted anomaly values or")
+        # axes[i].plot(det.anomaly_values_or.sum(axis=1).values, color=c)
+        # i += 1
+        # axes[i].set_title("predicted anomaly values xor")
+        # axes[i].plot(det.anomaly_values_xor.sum(axis=1).values, color=c)
+        # i += 1
         c = cmap(i / grid)
 
-        scoreYLimMin = np.min(
-            np.concatenate(
-                [
-                    det.prediction_details["scores_rhs"],
-                    det.prediction_details["scores_lhs"],
-                    score,
-                ]
+        if (
+            "scores_rhs" in det.prediction_details
+            and "scores_lhs" in det.prediction_details
+        ):
+            scoreYLimMin = np.min(
+                np.concatenate(
+                    [
+                        det.prediction_details["scores_rhs"],
+                        det.prediction_details["scores_lhs"],
+                        score,
+                    ]
+                )
             )
-        )
-        scoreYLimMax = np.max(
-            np.concatenate(
-                [
-                    det.prediction_details["scores_rhs"],
-                    det.prediction_details["scores_lhs"],
-                    score,
-                ]
+            scoreYLimMax = np.max(
+                np.concatenate(
+                    [
+                        det.prediction_details["scores_rhs"],
+                        det.prediction_details["scores_lhs"],
+                        score,
+                    ]
+                )
             )
-        )
+        else:
+            scoreYLimMin = np.min(score)
+            scoreYLimMax = np.max(score)
         scoreYLim = (scoreYLimMin, scoreYLimMax)
         axes[i].set_title("scores")
         axes[i].plot(score, color=c)
@@ -558,17 +564,23 @@ class Evaluator:
 
         return fig
 
-    def aggregate_anomaly_values_or(self, det, ds):
-        mean_anomaly_values = det.anomaly_values_or.mean()
+    def aggregate_anomaly_values(self, det, ds):
+        mean_anomaly_values = det.anomaly_values.mean()
         mean_df_row = pd.DataFrame(mean_anomaly_values).transpose()
-        # self.store_csv(mean_df_row, f"aggregated_anomalies_{det.name}_{ds.name}")
+        # self.store_aggregated_anomalies(mean_df_row, f"aggregated_anomalies_{det.name}_{ds.name}")
         return mean_df_row
 
-    def aggregate_anomaly_values_xor(self, det, ds):
-        mean_anomaly_values = det.anomaly_values_xor.mean()
-        mean_df_row = pd.DataFrame(mean_anomaly_values).transpose()
-        # self.store_csv(mean_df_row, f"aggregated_anomalies_{det.name}_{ds.name}")
-        return mean_df_row
+    # def aggregate_anomaly_values_or(self, det, ds):
+    #    mean_anomaly_values = det.anomaly_values_or.mean()
+    #    mean_df_row = pd.DataFrame(mean_anomaly_values).transpose()
+    #    # self.store_aggregated_anomalies(mean_df_row, f"aggregated_anomalies_{det.name}_{ds.name}")
+    #    return mean_df_row
+
+    # def aggregate_anomaly_values_xor(self, det, ds):
+    #    mean_anomaly_values = det.anomaly_values_xor.mean()
+    #    mean_df_row = pd.DataFrame(mean_anomaly_values).transpose()
+    #    # self.store_aggregated_anomalies(mean_df_row, f"aggregated_anomalies_{det.name}_{ds.name}")
+    #    return mean_df_row
 
     # create boxplot diagrams for auc values for each algorithm/dataset per algorithm/dataset
 
@@ -638,18 +650,29 @@ class Evaluator:
         if self.create_log_file:
             self.logger.info(f"Stored plot at {path}")
 
-    def store_csv(
+    def store_aggregated_anomalies(
         self, df: pd.DataFrame, title, no_counters=False, store_in_figures=False
     ):
         timestamp = time.strftime("%Y-%m-%d-%H%M%S")
         output_dir = self.output_dir
+        output_dir = os.path.join(output_dir, "aggregated_anomalies", timestamp)
         # output_dir = os.path.join(self.output_dir, "figures", f"seed-{self.seed}")
-        # os.makedirs(output_dir, exist_ok=True)
+        os.makedirs(output_dir, exist_ok=True)
         counters_str = (
             "" if no_counters else f"-{len(self.detectors)}-{len(self.datasets)}"
         )
-        path = os.path.join(output_dir, f"{title}{counters_str}-{timestamp}.csv")
+        path = os.path.join(output_dir, f"{title}{counters_str}.csv")
         df.to_csv(path, index=False)
+        path = os.path.join(output_dir, f"{title}{counters_str}_hist.pdf")
+        fig, ax = plt.subplots(figsize=(20,10))
+        index = np.arange(df.columns.shape[0])
+        bar_width = 0.2
+        ax.bar(index, df.values.flatten(), bar_width)
+        ax.set_xticks(index + bar_width)
+        ax.set_xticklabels(tuple(df.columns))
+        fig.savefig(path)
+
+
         if self.create_log_file:
             self.logger.info(f"Stored .csv result at {path}")
 
@@ -943,15 +966,19 @@ class Evaluator:
             results[(ds.name, det.name)] = score
             self.results[(ds.name, det.name)] = score
             print(f"Testing {det.name} on {ds.name} done")
-            anomaly_values_or = self.aggregate_anomaly_values_or(det, ds)
-            anomaly_values_xor = self.aggregate_anomaly_values_xor(det, ds)
+            anomaly_values = self.aggregate_anomaly_values(det, ds)
+            # anomaly_values_or = self.aggregate_anomaly_values_or(det, ds)
+            # anomaly_values_xor = self.aggregate_anomaly_values_xor(det, ds)
             try:
                 self.plot_details(det, ds, score)
             except Exception:
                 print(f"Could not plot details with {ds.name} and {det.name}")
         except Exception as e:
             results[(ds.name, det.name)] = np.zeros_like(y_test)
+            self.results[(ds.name, det.name)] = np.zeros_like(y_test)
             print(f"Exception in predict_async with {ds.name} and {det.name}")
         ds._data = None
         gc.collect()
-        return anomaly_values_or, anomaly_values_xor, results
+        # return anomaly_values_or, anomaly_values_xor, results
+        # return anomaly_values, results
+        return anomaly_values

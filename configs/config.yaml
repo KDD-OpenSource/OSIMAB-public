@@ -1,70 +1,41 @@
-# August: Change of Frequency
-#ctx:                            'Test_08_09_Model_On_08_10_20_CreateNicePlots_Anomalies_ACC_Shift'
-ctx:                            'TestPredictionAfterThresholdAdjustment_withoutAnomalies'
+ctx:                            'TrainEntireSmallLSTMED'
+
+modeFlg:                        ['both'] # {'train', 'test', 'both'}
 
 epoch:                          10
 log_file:                       False
 
-isTraining:                     True
 
-aggrFunc:                       ['or', 'xor']
-
-ace:
+#ace:
+model:
+    type:                       ['ace'] # {'ace', 'lstmed'}
+    # both
     seq_len:                    100
-    hiddenSize1:                5
-    hiddenSize2:                5
-    train_per:                  1
+    #train_per:                  1
     details:                    True
     LR:                         0.001
-    train_max:                  0.02
-    #train_max:                  0.002
+    train_max:                  1 # {1, 0.02}
+    load_file:                  [
+                                'results/model_AutoencoderJO_entireSmallDataset'
+                                ]
+    # ace
+    hiddenSize1:                5
+    hiddenSize2:                5
+    aggr_func:                  'xor'
     sensor_spec_loss:           True
     corr_loss:                  True
-    num_error_vects:            Null
-    #load_file:                  Null
-    #load_file:                  ['results/AutoencoderJO_[F2]',
-    #load_file:                  ['results/AutoencoderJO_[N.*SG.*]']
-    #load_file:                  ['results/model_AutoencoderJO_[F5.*ACC.*]_08_09']
-    #'results/AutoencoderJO_[F3]']
-    #load_file:                  ['results/AutoencoderJO_[N.*_F3.*SG_2_N.*, N.*_F3.*SG_2_SO.*]',
-    #                           'results/AutoencoderJO_[N.*_F2.*SG_2_N.*]']
-    load_file:                  [
-                                'results/year_model_AutoencoderJO_[F2.*ACC.*]',
-                                'results/year_model_AutoencoderJO_[F2.*SG.*]',
-                                'results/year_model_AutoencoderJO_[F3.*SG.*]',
-                                'results/year_model_AutoencoderJO_[F3.*ACC.*]',
-                                'results/year_model_AutoencoderJO_[F3.*WA.*]',
-                                'results/year_model_AutoencoderJO_[F4.*SG.*]',
-                                #'results/year_model_AutoencoderJO_[F4.*ACC.*]',
-                                'results/year_model_AutoencoderJO_[F4.*WA.*]',
-                                'results/year_model_AutoencoderJO_[F5.*ACC.*]',
-                                'results/year_model_AutoencoderJO_[F5.*WA.*]',
-                                'results/year_model_AutoencoderJO_[F6.*SG.*]',
-                                'results/year_model_AutoencoderJO_[F6.*ACC.*]',
-                                'results/year_model_AutoencoderJO_[F6.*WA.*]',
-                                ]
-    #load_file:                  Null
+    #num_error_vects:            Null
+    # lstmed
+    hiddenSize:                 110
 
-testSize:                       360000
 
-dataset:
+datasets:
+    trainSmall:                 False
     data_dir:                   '/osimab/data/itc-prod2.com/'
-    #regexp_bin_train:           ['OSIMAB_2020_08_20_0[3-4]*.zip', 'OSIMAB_2020_08_21_0[2-4]*.zip']
-    #regexp_bin_train:           ['OSIMAB_2020_08_20_0[3-4]*.zip']
-    #regexp_bin_train:           ['OSIMAB_2020_08!(*StatJournal).bin.zip']
-    #regexp_bin_train:           ['OSIMAB_2020_12_07_*[0-9].bin.zip']
-    #regexp_bin_train:           ['OSIMAB_2020_12_06_*[0-9].bin.zip']
-    #regexp_bin_train:           ['OSIMAB_2020_10_06_*[0-9].bin.zip']
     regexp_bin_train:           Null
-    #regexp_bin_train:            ['OSIMAB_2020_08_09*[0-9].bin.zip']
-    #regexp_bin_test:            ['OSIMAB_2020_08_09_0[0-3]*[0-9].bin.zip']
-    regexp_bin_test:            ['OSIMAB_2020_12_28_15*[0-9].bin.zip']
-    regexp_sensor:              ['F5.*ACC.*']
-    #regexp_sensor:              ['.*']
-    #regexp_sensor:              ['N.*_F3.*SG_2_N.*', 'N.*_F3.*SG_2_SO.*']
-    #regexp_sensor:              ['N.*_F2.*SG_2_N.*']
-    #regexp_sensor:              ['.*']
-    #impute_anomaly:             True
+    regexp_bin_test:            Null
+    testSize:                   10000
+    regexp_sensor:              ['.*']
     anomalies:
         nullSensor:             1
         shift:                  1

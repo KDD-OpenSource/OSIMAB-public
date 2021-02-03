@@ -85,7 +85,7 @@ class OSIMABDataset(RealDataset):
             ].unique()[0]
             sensor_list = []
             print(f"Processing {self.processed_path}")
-            for regex in self.cfg.dataset.regexp_sensor:
+            for regex in self.cfg.dataset.osimabLarge.regexp_sensor:
                 tmp = info_df[info_df["Channel Name"].str.contains(regex)]
                 tmp = tmp["Channel Name"]
                 sensor_list.extend(list(tmp))
@@ -99,23 +99,36 @@ class OSIMABDataset(RealDataset):
         # when we use the function .data() we must give it the optional
         # parameter of 'sensor_list' in order to be able to give it the sensor
         # list
+        if 'osimabSmall' in self.cfg.dataset_type:
+            test_len = self.cfg.dataset.osimabSmall.testSize
+        elif 'osimabLarge' in self.cfg.dataset_type:
+            test_len = self.cfg.dataset.osimabLarge.testSize
+        else:
+            raise Exception('No osimabdataset has been defined in type')
         (a, b), (c, d) = self.get_data_osimab(
-            test_len=self.cfg.testSize, sensor_list=sensor_list
+            test_len=test_len, sensor_list=sensor_list
         )
         self._data = (a, b, c, d)
 
     def get_data_osimab(self, test_len, sensor_list=None):
         # must be replaced by the procedure of reading the zip file and
-        df = catman_to_df(self.processed_path)[0]
+        if self.processed_path[-3:] == "csv":
+            df = pd.read_csv(self.processed_path)
+        else:
+            try:
+                df = catman_to_df(self.processed_path)[0]
+            except:
+                raise Exception("Could not open file")
         if sensor_list is not None:
             df = filterSensors(df, sensor_list)
         else:
-            df = filterSensors(df, self.cfg.dataset.regexp_sensor)
+            df = filterSensors(df, self.cfg.datasets.regexp_sensor)
         scaler = StandardScaler()
         scaler.fit(df)
 
         # train dataframe
-        n_train = int(df.shape[0] * self.cfg.ace.train_per)
+        #n_train = int(df.shape[0] * self.cfg.model.train_per)
+        n_train = int(df.shape[0])
         train = df.iloc[:n_train]
         train = pd.DataFrame(scaler.transform(train), columns=train.columns)
 
@@ -129,10 +142,12 @@ class OSIMABDataset(RealDataset):
         test_label = pd.Series(np.zeros(test.shape[0]))
 
         # anomalous part
-        if self.cfg.dataset.anomalies is not None:
-            num_anomalies = sum(self.cfg.dataset.anomalies.values())
+        dataset_type = self.cfg.dataset_type[0]
+
+        if self.cfg.dataset[dataset_type].anomalies is not None:
+            num_anomalies = sum(self.cfg.dataset[dataset_type].anomalies.values())
             anomaly_list = []
-            for item in self.cfg.dataset.anomalies.items():
+            for item in self.cfg.dataset[dataset_type].anomalies.items():
                 anomaly_list.extend(np.repeat(item[0], item[1]))
 
             dur = int(test.shape[0] / (2 * num_anomalies))
@@ -162,29 +177,43 @@ def impute_anomaly(test, test_label, dur, idx, anomaly, channel):
         test_label.iloc[:] = 1
     elif anomaly == "shift":
         tmp = test.iloc[idx : idx + dur, channel]
-        tmp = tmp + 4
+        tmp = tmp + 1 * test.iloc[:, channel].max()
+        # tmp = tmp + 4
         test.iloc[idx : idx + dur, channel] = tmp
         test_label.iloc[idx : idx + dur] = 1
     elif anomaly == "variance":
         tmp = test.iloc[idx : idx + dur, channel]
-        tmp = tmp * 4
+        tmp = tmp * 3
         test.iloc[idx : idx + dur, channel] = tmp
         test_label.iloc[idx : idx + dur] = 1
     elif anomaly == "peak":
         tmp = test.iloc[idx : idx + 3, channel]
-        tmp = tmp + 12
+        tmp = tmp + 3 * test.iloc[:, channel].max()
         test.iloc[idx : idx + 3, channel] = tmp
         test_label.iloc[idx : idx + 3] = 1
     elif anomaly == "timeshift":
         tmp = test.iloc[idx : idx + dur, channel]
-        tmp = tmp.shift(int(dur / 2), fill_value=np.mean(tmp) + 2)
+        tmp = tmp.shift(int(dur / 2), fill_value=np.mean(tmp))
         test.iloc[idx : idx + dur, channel] = tmp
         test_label.iloc[idx : idx + dur] = 1
     elif anomaly == "trend":
         tmp = test.iloc[idx : idx + dur, channel]
-        tmp = tmp + np.linspace(0, 5, tmp.shape[0])
+        goal_value = 2 * test.iloc[:, channel].max()
+        tmp = tmp + np.linspace(0, goal_value, tmp.shape[0])
         test.iloc[idx : idx + dur, channel] = tmp
         test_label.iloc[idx : idx + dur] = 1
+    elif anomaly == "shuffle":
+        num_splits = 10
+        split_length = int(test.shape[0]/num_splits)
+        print(split_length)
+        splits = [test.iloc[i*split_length: (i+1)*split_length] for i in
+                range(num_splits)]
+        print(splits)
+        permutation = np.random.permutation(range(num_splits))
+        print(permutation)
+        for i in range(10):
+            test.iloc[i*split_length: (i+1)*split_length] = splits[permutation[i]]
+        print(test)
     else:
         raise Exception("Unknown Anomaly Type")
     pd.options.mode.chained_assignment = "warn"
