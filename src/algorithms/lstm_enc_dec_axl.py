@@ -26,6 +26,7 @@ class LSTMED(Algorithm, PyTorchUtils):
         lr: float = 1e-3,
         hidden_size: int = 5,
         sequence_length: int = 30,
+        window_anomaly: bool = True,
         stride: int = 1,
         train_gaussian_percentage: float = 0.25,
         train_max: float = 1.0,
@@ -44,6 +45,7 @@ class LSTMED(Algorithm, PyTorchUtils):
 
         self.hidden_size = hidden_size
         self.sequence_length = sequence_length
+        self.window_anomaly = window_anomaly
         self.stride = stride
         self.train_gaussian_percentage = train_gaussian_percentage
         self.train_max = train_max
@@ -56,6 +58,7 @@ class LSTMED(Algorithm, PyTorchUtils):
         self.lstmed = None
         self.mean, self.cov = None, None
 
+    @Algorithm.measure_train_time
     def fit(self, X: pd.DataFrame):
         # torch.set_num_threads(1)
         self.input_size = X.shape[1]
@@ -76,11 +79,9 @@ class LSTMED(Algorithm, PyTorchUtils):
         )
 
         self.set_lstmed_module(X)
+        self.num_params = (sum(p.numel() for p in self.lstmed.parameters() if p.requires_grad))
         self.to_device(self.lstmed)
         optimizer = torch.optim.Adam(self.lstmed.parameters(), lr=self.lr)
-        # print(sum(p.numel() for p in self.lstmed.parameters() if p.requires_grad))
-        # print(sum(p.numel() for p in self.lstmed.parameters()))
-        # import pdb; pdb.set_trace()
 
         self.lstmed.train()
         for epoch in trange(self.num_epochs):
@@ -95,15 +96,6 @@ class LSTMED(Algorithm, PyTorchUtils):
                 optimizer.step()
 
         self.train_gaussians(train_gaussian_loader)
-        # self.lstmed.eval()
-        # error_vectors = []
-        # for ts_batch in train_gaussian_loader:
-        #    output = self.lstmed(self.to_var(ts_batch))
-        #    error = nn.L1Loss(reduce=False)(output, self.to_var(ts_batch.float()))
-        #    error_vectors += list(error.view(-1, X.shape[1]).data.cpu().numpy())
-
-        # self.mean = np.mean(error_vectors, axis=0)
-        # self.cov = np.cov(error_vectors, rowvar=False)
 
     def train_gaussians(self, train_gaussian_loader):
         self.lstmed.eval()
@@ -112,6 +104,11 @@ class LSTMED(Algorithm, PyTorchUtils):
             # error = nn.L1Loss(reduce=False)(output, self.to_var(ts_batch.float()))
             error = self.calc_errors(ts_batch, output)
             self.update_gaussians(error)
+
+        if len(train_gaussian_loader) == 0:
+            if self.window_anomaly:
+                self.mean = [0]
+                self.cov = np.identity(1)* 0.00000001
 
         self.anomaly_thresholds = []
         for mean, var in zip(self.mean, np.diagonal(self.cov)):
@@ -125,7 +122,8 @@ class LSTMED(Algorithm, PyTorchUtils):
         self.used_error_vects += error.size()[0]
 
     def update_gaussians_one_side(self, errors, mean, cov):
-        errors = errors.reshape(-1, self.input_size)
+        if len(errors.shape) > 1:
+            errors = errors.reshape(-1, self.input_size)
         errors = errors.data.cpu().numpy()
         if mean is None or cov is None:
             mean = np.mean(errors, axis=0)
@@ -139,8 +137,16 @@ class LSTMED(Algorithm, PyTorchUtils):
                 cov_dim = cov.shape[0]
             summedcov_new = np.empty(shape=(cov.shape))
             for error in errors:
+                try:
+                    error[0]
+                except:
+                    error = error[np.newaxis]
+                try:
+                    mean[0]
+                    mean_old = mean
+                except:
+                    mean_old = mean[np.newaxis]
                 # Mean Calculation
-                mean_old = mean
                 numErrorsAfterUpdate = self.used_error_vects + localErrorCount + 1
                 mean_new = (
                     1
@@ -189,11 +195,16 @@ class LSTMED(Algorithm, PyTorchUtils):
                 f"The prediction data contains attributes {list(X.columns)}"
             )
 
-    def predict(self, X: pd.DataFrame):
-        X.interpolate(inplace=True)
-        X.bfill(inplace=True)
-        data = X.values
-        sequences = make_sequences(data=X, sequence_length=self.sequence_length)
+    @Algorithm.measure_test_time
+    def predict(self, X: pd.DataFrame) -> np.array:
+        self.lstmed.eval()
+        X, sequences = self.data_preprocessing(X)
+        if list(X.columns) != self.sensor_list:
+            raise ValueError(
+                "You predict on other attributes than you trained on.\n"
+                f"The model was trained using attributes {self.sensor_list}"
+                f"The prediction data contains attributes {list(X.columns)}"
+            )
         data_loader = DataLoader(
             dataset=sequences,
             batch_size=self.batch_size,
@@ -201,7 +212,88 @@ class LSTMED(Algorithm, PyTorchUtils):
             drop_last=False,
         )
 
-        self.lstmed.eval()
+        if self.window_anomaly == False:
+            scores = self.predict_sensor_anomaly(X, data_loader)
+            return scores
+        elif self.window_anomaly == True:
+            scores = self.predict_window_anomaly(X, data_loader)
+            return scores
+
+    def predict_window_anomaly(self, X: pd.DataFrame, data_loader):
+        sensorNormals = []
+        for mean, var in zip(self.mean, np.diagonal(self.cov)):
+            sensorNormals.append(norm(loc=mean, scale=np.sqrt(var)))
+        normal = norm(loc = self.mean, scale = np.sqrt(self.cov[0]))
+
+        scores = []
+        outputs = []
+        errors = []
+        data_loader_len = len(data_loader)
+        for idx, ts in enumerate(data_loader):
+            print(idx/data_loader_len)
+            output = self.lstmed(self.to_var(ts))
+            error = self.calc_errors(ts, output)
+            score = -normal.logpdf(error.data.cpu().numpy())
+            scores.append(score)
+            if self.details:
+                outputs.append(output.data.numpy())
+                errors.append(error.data.numpy())
+
+        scores = self.concat_batches(scores)
+        scores = self.spread_seq_over_time_and_aggr(
+            scores, self.sequence_length, X, "mean"
+        )
+
+        lattice_sensors = np.full(
+            (self.sequence_length, X.shape[0], X.shape[1]), np.nan
+        )
+        # check how to best get anomaly_values
+        self.anomaly_values = self.get_window_anomaly_values(X, scores)
+
+        if self.details:
+
+            self.prediction_details.update(
+                {"anomaly_values": self.anomaly_values.values.T}
+            )
+
+            outputs = np.concatenate(outputs)
+            lattice = np.full((self.sequence_length, X.shape[0], X.shape[1]), np.nan)
+            for idx, output in enumerate(outputs):
+                i = idx * self.stride
+                lattice[
+                    i % self.sequence_length, i : i + self.sequence_length, :
+                ] = output
+            self.prediction_details.update(
+                {"reconstructions_mean": np.nanmean(lattice, axis=0).T}
+            )
+
+            errors = np.concatenate(errors)
+            lattice = np.full((self.sequence_length, X.shape[0], X.shape[1]), np.nan)
+            for idx, error in enumerate(errors):
+                i = idx * self.stride
+                lattice[
+                    i % self.sequence_length, i : i + self.sequence_length, :
+                ] = error
+            self.prediction_details.update(
+                {"errors_mean": np.nanmean(lattice, axis=0).T}
+            )
+
+        return scores
+
+
+    def predict_sensor_anomaly(self, X: pd.DataFrame, data_loader):
+#        X.interpolate(inplace=True)
+#        X.bfill(inplace=True)
+#        data = X.values
+#        sequences = make_sequences(data=X, sequence_length=self.sequence_length)
+#        data_loader = DataLoader(
+#            dataset=sequences,
+#            batch_size=self.batch_size,
+#            shuffle=False,
+#            drop_last=False,
+#        )
+#
+#        self.lstmed.eval()
         mvnormal = multivariate_normal(self.mean, self.cov, allow_singular=True)
         # add normals here
         sensorNormals = []
@@ -212,8 +304,9 @@ class LSTMED(Algorithm, PyTorchUtils):
         scoresSensors = []
         outputs = []
         errors = []
+        data_loader_len = len(data_loader)
         for idx, ts in enumerate(data_loader):
-            print(idx)
+            print(idx/data_loader_len)
             output = self.lstmed(self.to_var(ts))
             error = self.calc_errors(ts, output)
             score = -mvnormal.logpdf(error.view(-1, X.shape[1]).data.cpu().numpy())
@@ -249,7 +342,7 @@ class LSTMED(Algorithm, PyTorchUtils):
         # lattice_sensors_lhs, 'median')
         scoresSensors = self.calc_lattice(X, scoresSensors, lattice_sensors)
 
-        self.anomaly_values = self.get_anomaly_values(X, scoresSensors)
+        self.anomaly_values = self.get_sensor_anomaly_values(X, scoresSensors)
 
         if self.details:
 
@@ -281,15 +374,26 @@ class LSTMED(Algorithm, PyTorchUtils):
 
         return scores
 
-    def get_anomaly_values(self, X, scoresSensors):
+    def get_sensor_anomaly_values(self, X, scoresSensors):
         anomalyValues = scoresSensors.T > self.anomaly_thresholds
         anomalyValues_ints = np.zeros(shape=X.shape)
         anomalyValues_ints[anomalyValues == True] = 1
         anomaly_values = pd.DataFrame(columns=X.columns, data=anomalyValues_ints)
         return anomaly_values
 
+    def get_window_anomaly_values(self, X, scores):
+        anomalyValues = scores > self.anomaly_thresholds
+        anomalyValues_ints = np.zeros(shape=scores.shape)
+        anomalyValues_ints[anomalyValues == True] = 1
+        anomaly_values = pd.DataFrame(data=anomalyValues_ints)
+        return anomaly_values
+
     def calc_errors(self, ts, output):
-        error = nn.L1Loss(reduction="none")(output, self.to_var(ts.float()))
+        #error = nn.L1Loss(reduction="none")(output, self.to_var(ts.float()))
+        # changed to MSE as in training MSE has been used as well
+        error = nn.MSELoss(reduction="none")(output, self.to_var(ts.float()))
+        if self.window_anomaly:
+            error = torch.mean(error, dim=(1,2))
         return error
 
     def calc_lattice(self, X, data, lattice, aggregate="mean"):
@@ -388,6 +492,15 @@ class LSTMED(Algorithm, PyTorchUtils):
             self.cov = np.load(f)
             self.anomaly_thresholds = np.load(f)
 
+    def data_preprocessing(self, X: pd.DataFrame):
+        X.interpolate(inplace=True)
+        X.bfill(inplace=True)
+        data = X.values
+        sequences = [
+            data[i : i + self.sequence_length]
+            for i in range(data.shape[0] - self.sequence_length + 1)
+        ]
+        return X, sequences
 
 class LSTMEDModule(nn.Module, PyTorchUtils):
     def __init__(

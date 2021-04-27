@@ -20,6 +20,8 @@ import progressbar
 import time
 import pathos.multiprocessing as mp
 import yaml
+import tikzplotlib as tikz
+
 from sklearn.metrics import accuracy_score, fbeta_score
 from sklearn.metrics import precision_recall_fscore_support as prf
 from sklearn.metrics import roc_curve, auc
@@ -79,8 +81,7 @@ class Evaluator:
 
         self.results = dict()
         if self.cfg is not None:
-            with open(os.path.join(self.output_dir, "config.yaml"), "w") as cfg_file:
-                yaml.dump(self.cfg.config_dict, cfg_file)
+            self.cfg.to_yaml(os.path.join(self.output_dir, "config.yaml"))
         self.logger = logging.getLogger(__name__)
 
     @property
@@ -194,7 +195,6 @@ class Evaluator:
             self.store_aggregated_anomalies(anomaly_values, f"aggregated_anomalies")
         self.anomaly_values = anomaly_values
 
-
     def calc_anomaly_values_parallel(self):
         anomaly_values_loc = []
 
@@ -229,6 +229,7 @@ class Evaluator:
         # anomaly_values_xor = pd.DataFrame()
         for det in progressbar.progressbar(self.detectors):
             for ds in progressbar.progressbar(self.datasets):
+                # test where there are multiple datasets coming from
                 (X_train, y_train, X_test, y_test) = ds.data(det.sensor_list)
                 if self.create_log_file:
                     self.logger.info(
@@ -236,6 +237,8 @@ class Evaluator:
                     )
                 try:
                     score = det.predict(X_test.copy())
+                    # test following line
+                    det.save_test_time(self.output_dir)
                     self.results[(ds.name, det.name)] = score
                     anomaly_values = pd.concat(
                         [
@@ -404,14 +407,49 @@ class Evaluator:
         detectors = self.detectors
         plt.close("all")
         figures = []
-        for ds in self.datasets:
-            _, _, _, y_test = ds.data()
-            fig_scale = 3
-            fig = plt.figure(figsize=(fig_scale * len(detectors), fig_scale))
-            fig.canvas.set_window_title(ds.name + " ROC")
-            fig.suptitle(f"ROC curve on {ds.name}", fontsize=14, y="1.1")
-            subplot_count = 1
-            for det in detectors:
+        # for ds in self.datasets:
+        #    _, _, _, y_test = ds.data()
+        #    fig_scale = 3
+        #    fig = plt.figure(figsize=(fig_scale * len(detectors), fig_scale))
+        #    fig.canvas.set_window_title(ds.name + " ROC")
+        #    fig.suptitle(f"ROC curve on {ds.name}", fontsize=14, y="1.1")
+        #    subplot_count = 1
+        #    for det in detectors:
+        #        if self.create_log_file:
+        #            self.logger.info(f"Plotting ROC curve for {det.name} on {ds.name}")
+        #        score = self.results[(ds.name, det.name)]
+        #        if np.isnan(score).all():
+        #            score = np.zeros_like(score)
+        #        # Rank NaN below every other value in terms of anomaly score
+        #        score[np.isnan(score)] = np.nanmin(score) - sys.float_info.epsilon
+        #        fpr, tpr, _ = roc_curve(y_test, score)
+        #        roc_auc = auc(fpr, tpr)
+        #        plt.subplot(1, len(detectors), subplot_count)
+        #        plt.plot(
+        #            fpr, tpr, color="darkorange", lw=2, label="area = %0.2f" % roc_auc
+        #        )
+        #        subplot_count += 1
+        #        plt.plot([0, 1], [0, 1], color="navy", lw=2, linestyle="--")
+        #        plt.xlim([0.0, 1.0])
+        #        plt.ylim([0.0, 1.05])
+        #        plt.xlabel("False Positive Rate")
+        #        plt.ylabel("True Positive Rate")
+        #        plt.gca().set_aspect("equal", adjustable="box")
+        #        plt.title("\n".join(wrap(det.name, 20)))
+        #        plt.legend(loc="lower right")
+        #    plt.tight_layout()
+        #    if store:
+        #        self.store(fig, f"roc_{ds.name}")
+        #    figures.append(fig)
+
+        for det in detectors:
+            for ds in self.datasets:
+                fig_scale = 3
+                fig = plt.figure(figsize=(fig_scale * len(detectors), fig_scale))
+                fig.canvas.set_window_title(ds.name + " ROC")
+                fig.suptitle(f"ROC curve on {ds.name}", fontsize=14, y="1.1")
+                subplot_count = 1
+                _, _, _, y_test = ds.data(det.sensor_list)
                 if self.create_log_file:
                     self.logger.info(f"Plotting ROC curve for {det.name} on {ds.name}")
                 score = self.results[(ds.name, det.name)]
@@ -434,10 +472,11 @@ class Evaluator:
                 plt.gca().set_aspect("equal", adjustable="box")
                 plt.title("\n".join(wrap(det.name, 20)))
                 plt.legend(loc="lower right")
-            plt.tight_layout()
-            if store:
-                self.store(fig, f"roc_{ds.name}")
-            figures.append(fig)
+                plt.tight_layout()
+                if store:
+                    self.store(fig, f"roc_{ds.name}")
+                    self.store_auc(roc_auc, f"roc_{ds.name}")
+                figures.append(fig)
         return figures
 
     def plot_auroc(self, store=True, title="AUROC"):
@@ -465,8 +504,10 @@ class Evaluator:
         for value in det.prediction_details.values():
             grid += 1 if value.ndim == 1 else value.shape[0]
         grid += X_test.shape[1]  # data
-        # grid += 1 + 1 + 1 + 1  # score, gt and 2* prediction
+        grid += 1 + 1 + 1 + 1  # score, gt and 2* prediction
         grid += 1 + 1 + 1  # score, gt and prediction
+        if "latent_mean" in det.prediction_details:
+            grid += 1
 
         fig, axes = plt.subplots(grid, 1, figsize=(15, 1.5 * grid))
 
@@ -477,7 +518,7 @@ class Evaluator:
         testDataYLim = (np.min(X_test.values), np.max(X_test.values))
         for col in X_test.values.T:
             axes[i].plot(col, color=c)
-            axes[i].set_ylim(testDataYLim)
+            # axes[i].set_ylim(testDataYLim)
             i += 1
         c = cmap(i / grid)
 
@@ -487,7 +528,10 @@ class Evaluator:
         c = cmap(i / grid)
 
         axes[i].set_title("predicted anomaly values sum")
-        axes[i].plot(det.anomaly_values.sum(axis=1).values, color=c)
+        if len(det.anomaly_values.shape) > 1:
+            axes[i].plot(det.anomaly_values.sum(axis=1).values, color=c)
+        else:
+            axes[i].plot(det.anomaly_values, color=c)
         i += 1
         # axes[i].set_title("predicted anomaly values or")
         # axes[i].plot(det.anomaly_values_or.sum(axis=1).values, color=c)
@@ -537,7 +581,7 @@ class Evaluator:
 
         # Todo: think about how to reorder the prediction_details
         for key, values in det.prediction_details.items():
-            if key == "scores_lhs" or key == "scores_rhs":
+            if key == "scores_lhs" or key == "scores_rhs" or key == "latent_mean":
                 # Todo: replace by command to just skip the current iterantion
                 # of the for-loop
                 continue
@@ -546,17 +590,22 @@ class Evaluator:
             min_val = np.min(np.min(values)) - 0.1 * abs(np.min(np.min(values))) - 0.1
             if values.ndim == 1:
                 axes[i].plot(values, color=c)
-                axes[i].set_ylim(min_val, max_val)
+                # axes[i].set_ylim(min_val, max_val)
                 i += 1
             elif values.ndim == 2:
                 for v in values:
                     axes[i].plot(v, color=c)
-                    axes[i].set_ylim(min_val, max_val)
+                    # axes[i].set_ylim(min_val, max_val)
                     i += 1
             else:
                 if self.create_log_file:
                     self.logger.warning("plot_details: not sure what to do")
             c = cmap(i / grid)
+
+        for key, values in det.prediction_details.items():
+            if key == "latent_mean":
+                axes[i].set_title(key)
+                axes[i].plot(values, color=c)
 
         fig.tight_layout()
         if store:
@@ -565,24 +614,8 @@ class Evaluator:
         return fig
 
     def aggregate_anomaly_values(self, det, ds):
-        mean_anomaly_values = det.anomaly_values.mean()
-        mean_df_row = pd.DataFrame(mean_anomaly_values).transpose()
-        # self.store_aggregated_anomalies(mean_df_row, f"aggregated_anomalies_{det.name}_{ds.name}")
-        return mean_df_row
-
-    # def aggregate_anomaly_values_or(self, det, ds):
-    #    mean_anomaly_values = det.anomaly_values_or.mean()
-    #    mean_df_row = pd.DataFrame(mean_anomaly_values).transpose()
-    #    # self.store_aggregated_anomalies(mean_df_row, f"aggregated_anomalies_{det.name}_{ds.name}")
-    #    return mean_df_row
-
-    # def aggregate_anomaly_values_xor(self, det, ds):
-    #    mean_anomaly_values = det.anomaly_values_xor.mean()
-    #    mean_df_row = pd.DataFrame(mean_anomaly_values).transpose()
-    #    # self.store_aggregated_anomalies(mean_df_row, f"aggregated_anomalies_{det.name}_{ds.name}")
-    #    return mean_df_row
-
-    # create boxplot diagrams for auc values for each algorithm/dataset per algorithm/dataset
+        mean_anomaly_df = pd.DataFrame(det.anomaly_values).mean().transpose()
+        return mean_anomaly_df
 
     def create_boxplots(self, runs, data, detectorwise=True, store=True):
         target = "algorithm" if detectorwise else "dataset"
@@ -649,6 +682,35 @@ class Evaluator:
         fig.savefig(path)
         if self.create_log_file:
             self.logger.info(f"Stored plot at {path}")
+        try:
+            if "save_tikz" in self.cfg:
+                if self.cfg.save_tikz == True:
+                    path = os.path.join(
+                        output_dir, f"{title}{counters_str}-{timestamp}.tex"
+                    )
+                    tikz.save(path)
+        except:
+            pass
+
+    def store_auc(
+        self, auc, title, extension="txt", no_counters=False, store_in_figures=False
+    ):
+        timestamp = time.strftime("%Y-%m-%d-%H%M%S")
+        if store_in_figures:
+            output_dir = os.path.join(self.output_dir, "figures")
+        else:
+            output_dir = os.path.join(self.output_dir, "figures", f"seed-{self.seed}")
+        os.makedirs(output_dir, exist_ok=True)
+        counters_str = (
+            "" if no_counters else f"-{len(self.detectors)}-{len(self.datasets)}"
+        )
+        path = os.path.join(
+            output_dir, f"{title}{counters_str}-{timestamp}.{extension}"
+        )
+        with open(path, "w") as aucfile:
+            aucfile.write(str(auc))
+        if self.create_log_file:
+            self.logger.info(f"Stored auc at {path}")
 
     def store_aggregated_anomalies(
         self, df: pd.DataFrame, title, no_counters=False, store_in_figures=False
@@ -664,14 +726,13 @@ class Evaluator:
         path = os.path.join(output_dir, f"{title}{counters_str}.csv")
         df.to_csv(path, index=False)
         path = os.path.join(output_dir, f"{title}{counters_str}_hist.pdf")
-        fig, ax = plt.subplots(figsize=(20,10))
+        fig, ax = plt.subplots(figsize=(20, 10))
         index = np.arange(df.columns.shape[0])
         bar_width = 0.2
         ax.bar(index, df.values.flatten(), bar_width)
         ax.set_xticks(index + bar_width)
         ax.set_xticklabels(tuple(df.columns))
         fig.savefig(path)
-
 
         if self.create_log_file:
             self.logger.info(f"Stored .csv result at {path}")
@@ -874,9 +935,7 @@ class Evaluator:
         if len(datasets) > 2:
             fig.tight_layout()
         if store:
-            evaluators[0].store(
-                fig, "heatmap", no_counters=True, store_in_figures=True
-            )
+            evaluators[0].store(fig, "heatmap", no_counters=True, store_in_figures=True)
         return fig
 
     def plot_single_heatmap(self, store=True):

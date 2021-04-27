@@ -7,6 +7,11 @@ import copy
 
 from src.datasets import OSIMABDataset
 from src.datasets import OSIMABDatasetSmall
+from src.datasets import OSIMABDatasetSmall_6Sensors
+from src.datasets import OSIMABDatasetSmall_South
+from src.datasets import SWaTDatasets
+from src.datasets import WADIDatasets
+from src.datasets import BATADALDatasets
 from src.evaluation import Evaluator
 from src.algorithms import AutoEncoder
 from src.algorithms import LSTMEDP
@@ -35,9 +40,9 @@ from pprint import pprint
 
 
 def main():
-    cfg = get_config()
-    evaluators = evaluate_osimab_jo(cfg)
-    #join_evaluations(evaluators)
+    cfgs = get_configs()
+    for cfg in cfgs:
+        evaluators = evaluate_osimab_jo(cfg)
 
 
 def evaluate_osimab_jo(cfg):
@@ -55,20 +60,20 @@ def evaluate_osimab_jo(cfg):
     if "train" in cfg.modeFlg:
         models.extend(train_models(seed, cfg, output_dir, logger))
     for model_type in model_types:
-        if (model_type in cfg.model and cfg.model[model_type].load_file is not
-                None):
-            models.extend(load_different_sensor_models(cfg, seed))
+        if model_type in cfg.model and cfg.model[model_type].load_file is not None:
+            if cfg.model[model_type].same_sensor_model == True:
+                models.extend(load_same_sensor_models(cfg, seed))
+            else:
+                models.extend(load_different_sensor_models(cfg, seed))
 
     evaluators = []
     if "test" in cfg.modeFlg:
         evaluators.append(test_models(seed, cfg, output_dir, models))
 
 
-
 def eval_osimab_crossval(seed, cfg, output_dir):
     datasets_tot = get_datasets_train_osimab_small(cfg)
     intersected_sensors = getIntersectedSensors(cfg, datasets_tot)
-    import pdb; pdb.set_trace()
 
     # get arguments
     arg_list = []
@@ -101,7 +106,7 @@ def train_models(seed, cfg, output_dir, logger):
             Training on sensors {intersected_sensors} with datasets
             given by {datasets_train}"""
     )
-    model_name = cfg.models[0] + '_' + cfg.dataset_type[0]
+    model_name = cfg.models[0] + "_" + cfg.dataset_type[0]
     models.extend(
         add_train_models(
             cfg,
@@ -110,7 +115,7 @@ def train_models(seed, cfg, output_dir, logger):
             output_dir,
             intersected_sensors,
             logger=logger,
-            name=model_name
+            name=model_name,
         )
     )
     return models
@@ -119,8 +124,19 @@ def train_models(seed, cfg, output_dir, logger):
 def test_models(seed, cfg, output_dir, models):
     if len(models) == 0:
         raise Exception("No models were specified (neither trained nor loaded)")
-    if cfg.datasets.osimabSmall == True:
+
+    if "osimabSmall" in cfg.dataset_type:
         datasets_test = get_datasets_test_osimab_small(cfg)
+    elif "osimabSmall_6Sensors" in cfg.dataset_type:
+        datasets_test = get_datasets_test_osimab_small_6Sensors(cfg)
+    elif "osimabSmall_South" in cfg.dataset_type:
+        datasets_test = get_datasets_test_osimab_small_South(cfg)
+    elif "SWaT" in cfg.dataset_type:
+        datasets_test = get_datasets_test_swat(cfg)
+    elif "WADI" in cfg.dataset_type:
+        datasets_test = get_datasets_test_wadi(cfg)
+    elif "BATADAL" in cfg.dataset_type:
+        datasets_test = get_datasets_test_batadal(cfg)
     else:
         datasets_test = get_datasets_test(cfg)
     evaluator_res = predict_testsets(datasets_test, models, output_dir, seed, cfg)
@@ -162,10 +178,22 @@ def test_cross_val_async(seed, cfg, output_dir, models, dataset_test):
     return evaluator_res
 
 
-def get_config():
-    cfg = config(external_path=sys.argv[1])
-    cfg = Box(cfg.config_dict)
-    return cfg 
+def get_configs():
+    cfgs = []
+    if sys.argv[1] == "configs/configlist.txt":
+        with open(
+            os.path.join(os.getcwd(), "configs/configlist.txt"), "r"
+        ) as configlist:
+            for line in configlist.readlines():
+                print(line.strip())
+                cfg_box = Box(config(external_path=line.strip()).config_dict)
+                cfgs.append(cfg_box)
+    else:
+        for cfg in sys.argv[1:]:
+            cfg_box = Box(config(external_path=cfg).config_dict)
+            cfgs.append(cfg_box)
+    return cfgs
+
 
 def get_logger(cfg):
     timestamp = time.strftime("%Y-%m-%d-%H%M%S")
@@ -178,10 +206,20 @@ def get_logger(cfg):
 
 def get_datasets_train(cfg):
     train_datasets_type = cfg.dataset_type
-    if cfg.dataset_type == ['osimabSmall']:
+    if "osimabSmall" in cfg.dataset_type:
         return get_datasets_train_osimab_small(cfg)
-    if cfg.dataset_type == ['osimabLarge']:
+    if "osimabSmall_6Sensors" in cfg.dataset_type:
+        return get_datasets_train_osimab_small_6Sensors(cfg)
+    if "osimabSmall_South" in cfg.dataset_type:
+        return get_datasets_train_osimab_small_South(cfg)
+    if "osimabLarge" in cfg.dataset_type:
         return get_datasets_train_osimab_large(cfg)
+    if "SWaT" in cfg.dataset_type:
+        return get_datasets_train_swat(cfg)
+    if "WADI" in cfg.dataset_type:
+        return get_datasets_train_wadi(cfg)
+    if "BATADAL" in cfg.dataset_type:
+        return get_datasets_train_batadal(cfg)
 
 
 def get_datasets_train_osimab_large(cfg):
@@ -190,8 +228,8 @@ def get_datasets_train_osimab_large(cfg):
 
     datasets_train = []
     pathnames_train = []
-    for regexp_bin in cfg.datasets.regexp_bin_train:
-        pathnamesRegExp = os.path.join(cfg.datasets.data_dir, regexp_bin)
+    for regexp_bin in cfg.dataset.osimabLarge.regexp_bin_train:
+        pathnamesRegExp = os.path.join(cfg.dataset.osimabLarge.data_dir, regexp_bin)
         pathnames_train += glob.glob(pathnamesRegExp)
     filenames_train = [os.path.basename(pathname) for pathname in pathnames_train]
 
@@ -207,15 +245,45 @@ def get_datasets_train_osimab_large(cfg):
 
 def get_datasets_train_osimab_small(cfg):
     osimabDatasetSmall = OSIMABDatasetSmall(cfg)
-    datasets_train = osimabDatasetSmall.training_datasets
+    datasets_train = osimabDatasetSmall.datasets
+    return datasets_train
+
+
+def get_datasets_train_osimab_small_6Sensors(cfg):
+    osimabDatasetSmall = OSIMABDatasetSmall_6Sensors(cfg)
+    datasets_train = osimabDatasetSmall.datasets
+    return datasets_train
+
+
+def get_datasets_train_osimab_small_South(cfg):
+    osimabDatasetSmall = OSIMABDatasetSmall_South(cfg)
+    datasets_train = osimabDatasetSmall.datasets
+    return datasets_train
+
+
+def get_datasets_train_swat(cfg):
+    swatDataset = SWaTDatasets(cfg)
+    datasets_train = swatDataset.datasets
+    return datasets_train
+
+
+def get_datasets_train_wadi(cfg):
+    swatDataset = WADIDatasets(cfg)
+    datasets_train = swatDataset.datasets
+    return datasets_train
+
+
+def get_datasets_train_batadal(cfg):
+    swatDataset = BATADALDatasets(cfg)
+    datasets_train = swatDataset.datasets
     return datasets_train
 
 
 def get_datasets_test_by_day(cfg):
     datasets_test = []
     pathnames_test = []
-    for regexp_bin in cfg.datasets.regexp_bin_test:
-        pathnamesRegExp = os.path.join(cfg.datasets.data_dir, regexp_bin)
+    for regexp_bin in cfg.dataset.osimabLarge.regexp_bin_test:
+        pathnamesRegExp = os.path.join(cfg.dataset.osimabLarge.data_dir, regexp_bin)
         pathnames_test += glob.glob(pathnamesRegExp)
     filenames_test = [os.path.basename(pathname) for pathname in pathnames_test]
     all_days = list(set(map(lambda x: x[:17], filenames_test)))
@@ -243,8 +311,8 @@ def get_datasets_test_by_day(cfg):
 def get_datasets_test(cfg):
 
     pathnames_test = []
-    for regexp_bin in cfg.datasets.regexp_bin_test:
-        pathnamesRegExp = os.path.join(cfg.datasets.data_dir, regexp_bin)
+    for regexp_bin in cfg.dataset.osimabLarge.regexp_bin_test:
+        pathnamesRegExp = os.path.join(cfg.dataset.osimabLarge.data_dir, regexp_bin)
         pathnames_test += glob.glob(pathnamesRegExp)
     filenames_test = [os.path.basename(pathname) for pathname in pathnames_test]
 
@@ -259,7 +327,37 @@ def get_datasets_test(cfg):
 
 def get_datasets_test_osimab_small(cfg):
     osimabDatasetSmall = OSIMABDatasetSmall(cfg)
-    datasets_test = osimabDatasetSmall.training_datasets
+    datasets_test = osimabDatasetSmall.datasets
+    return datasets_test
+
+
+def get_datasets_test_osimab_small_6Sensors(cfg):
+    osimabDatasetSmall = OSIMABDatasetSmall_6Sensors(cfg)
+    datasets_test = osimabDatasetSmall.datasets
+    return datasets_test
+
+
+def get_datasets_test_osimab_small_South(cfg):
+    osimabDatasetSmall = OSIMABDatasetSmall_South(cfg)
+    datasets_test = osimabDatasetSmall.datasets
+    return datasets_test
+
+
+def get_datasets_test_swat(cfg):
+    swatDataset = SWaTDatasets(cfg)
+    datasets_test = swatDataset.datasets
+    return datasets_test
+
+
+def get_datasets_test_wadi(cfg):
+    swatDataset = WADIDatasets(cfg)
+    datasets_test = swatDataset.datasets
+    return datasets_test
+
+
+def get_datasets_test_batadal(cfg):
+    swatDataset = BATADALDatasets(cfg)
+    datasets_test = swatDataset.datasets
     return datasets_test
 
 
@@ -284,6 +382,8 @@ def add_train_models(
             model_dir = os.path.join(output_dir, f"model_{model.name}")
             os.makedirs(model_dir, exist_ok=True)
             model.save(model_dir)
+            model.save_train_time(model_dir)
+            model.save_num_params(model_dir)
     return models
 
 
@@ -301,6 +401,7 @@ def predict_test_days(test_days, dets, output_dirs, seed, cfg):
         else:
             raise Exception("You should specify an output folder")
         evaluator.evaluate()
+        evaluator.plot_roc_curves()
 
 
 def predict_testsets(datasets_test, dets, output_dir, seed, cfg):
@@ -313,6 +414,7 @@ def predict_testsets(datasets_test, dets, output_dir, seed, cfg):
         create_log_file=cfg.log_file,
     )
     evaluator.evaluate()
+    evaluator.plot_roc_curves()
     return evaluator
 
 

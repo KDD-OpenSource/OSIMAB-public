@@ -99,9 +99,7 @@ class Plotter:
         final_det_name = NAMES_TRANSLATION.get(det, det)
         fig.subplots_adjust(wspace=0)
         fig.suptitle(f"Area under ROC for {final_det_name} (runs={len(self.results)})")
-        self.store(
-            fig, f"boxplot-{final_det_name}-{title}", "pdf", bbox_inches="tight"
-        )
+        self.store(fig, f"boxplot-{final_det_name}-{title}", "pdf", bbox_inches="tight")
         return fig
 
     def _styled_boxplot(self, ax, aurocs_df, det):

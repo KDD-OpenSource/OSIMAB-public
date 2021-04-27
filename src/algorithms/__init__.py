@@ -1,6 +1,7 @@
 from .dagmm import DAGMM
 from .donut import Donut
 from .autoencoder import AutoEncoder
+from .autoencoder_light import AutoEncoder_Light
 from .autoencoder_diff import AutoEncoderDiff
 from .aae_diff import AdversarialAutoEncoderDiff
 from .aae import AdversarialAutoEncoder
@@ -14,6 +15,7 @@ from .ace_jo import ACE
 
 __all__ = [
     "AutoEncoder",
+    "AutoEncoder_Light",
     "AutoEncoderDiff",
     "AdversarialAutoEncoder",
     "AdversarialAutoEncoderDiff",

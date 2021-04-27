@@ -1,4 +1,5 @@
 import pandas as pd
+import librosa
 import re
 from pprint import pprint
 import numpy as np
@@ -11,7 +12,8 @@ import os
 
 
 class OSIMABDataset(RealDataset):
-    def __init__(self, cfg, file_name=None):
+    def __init__(self, cfg, file_name=None, shifted_sensors = None,
+            shift_length = 100, scaler=None, preproc=None):
         if file_name is None:
             file_name = "osimab-data.csv"
         super().__init__(
@@ -22,6 +24,40 @@ class OSIMABDataset(RealDataset):
         self.processed_path = os.path.abspath(file_name)
         self.name = os.path.basename(file_name)
         self.cfg = cfg
+        self.shifted_sensors = shifted_sensors
+        self.shift_length=shift_length
+        self.scaler = scaler
+        self.preproc = preproc
+
+    def shift_sensors(self, df, sensor_list, length):
+        res_df = pd.DataFrame()
+        df_length = df.shape[0]
+        for sensor in df.columns:
+            if sensor in sensor_list:
+                res_df[sensor] = df[sensor].iloc[:df_length-length].values
+                # shift
+            else:
+                res_df[sensor] = df[sensor].iloc[length:].values
+                # no shift
+        return res_df
+
+    def get_abs_value(self, train, test):
+        return abs(train), abs(test)
+
+    def get_squared_value(self, train, test):
+        return train**2, test**2
+
+    def get_mfcc(self, train, test):
+        train_df = pd.DataFrame()
+        test_df = pd.DataFrame()
+        for elem in train.values.transpose():
+            train_df = pd.concat([train_df, pd.DataFrame(librosa.feature.mfcc(elem,
+                sr=100, hop_length=1)).transpose()], axis=1)
+        for elem in test.values.transpose():
+            test_df = pd.concat([test_df, pd.DataFrame(librosa.feature.mfcc(elem,
+                sr=100, hop_length=1)).transpose()], axis=1)
+        return train_df, test_df
+
 
     def check_validity(self, cm_reader):
         try:
@@ -96,15 +132,20 @@ class OSIMABDataset(RealDataset):
         self._data = None
 
     def load(self, sensor_list=None):
+        self.sensor_list = sensor_list
         # when we use the function .data() we must give it the optional
         # parameter of 'sensor_list' in order to be able to give it the sensor
         # list
-        if 'osimabSmall' in self.cfg.dataset_type:
+        if "osimabSmall" in self.cfg.dataset_type:
             test_len = self.cfg.dataset.osimabSmall.testSize
-        elif 'osimabLarge' in self.cfg.dataset_type:
+        elif "osimabLarge" in self.cfg.dataset_type:
             test_len = self.cfg.dataset.osimabLarge.testSize
+        elif "osimabSmall_6Sensors" in self.cfg.dataset_type:
+            test_len = self.cfg.dataset.osimabSmall_6Sensors.testSize
+        elif "osimabSmall_South" in self.cfg.dataset_type:
+            test_len = self.cfg.dataset.osimabSmall_South.testSize
         else:
-            raise Exception('No osimabdataset has been defined in type')
+            raise Exception("No osimabdataset has been defined in type")
         (a, b), (c, d) = self.get_data_osimab(
             test_len=test_len, sensor_list=sensor_list
         )
@@ -123,20 +164,16 @@ class OSIMABDataset(RealDataset):
             df = filterSensors(df, sensor_list)
         else:
             df = filterSensors(df, self.cfg.datasets.regexp_sensor)
-        scaler = StandardScaler()
-        scaler.fit(df)
+        if self.shifted_sensors != None:
+            df = self.shift_sensors(df, self.shifted_sensors, self.shift_length)
 
-        # train dataframe
-        #n_train = int(df.shape[0] * self.cfg.model.train_per)
-        n_train = int(df.shape[0])
-        train = df.iloc[:n_train]
-        train = pd.DataFrame(scaler.transform(train), columns=train.columns)
-
-        rand_idx = df.shape[0] - 1 - test_len
-        test = df.iloc[rand_idx : rand_idx + test_len]
-        # take the last indices
-        if test_len == 360000:
+        if test_len == -1:
             test = df
+            n_train = 0
+        else:
+            test = df.iloc[df.shape[0]-test_len:]
+            n_train = int(df.shape[0])-test_len
+        train = df.iloc[:n_train]
 
         train_label = pd.Series(np.zeros(train.shape[0]))
         test_label = pd.Series(np.zeros(test.shape[0]))
@@ -154,18 +191,25 @@ class OSIMABDataset(RealDataset):
             idxs = int((test.shape[0] - dur) / dur)
             idxs = np.random.choice(idxs, num_anomalies)
             idxs = idxs * dur
-            channels = []
             num_channels = test.shape[1]
-            for anomaly in anomaly_list:
-                channels.append(np.random.choice(num_channels, 1)[0])
+            channels = np.random.choice(
+                num_channels, size=len(anomaly_list), replace=False
+            )
 
             for idx, anomaly, channel in zip(idxs, anomaly_list, channels):
                 test, test_label = impute_anomaly(
                     test, test_label, dur, idx, anomaly, channel
                 )
 
-        # after (optionally) imputing anomalies we rescale the dataset
-        test = pd.DataFrame(scaler.transform(test), columns=test.columns)
+        train, test = self.scale_data(train, test, scaler=self.scaler)
+        if self.preproc == 'abs_value':
+            train, test = self.get_abs_value(train, test)
+        if self.preproc == 'squared':
+            train, test = self.get_squared_value(train, test)
+        if self.preproc == 'mfcc':
+            train, test = self.get_mfcc(train, test)
+
+
         return (train, train_label), (test, test_label)
 
 
@@ -191,11 +235,17 @@ def impute_anomaly(test, test_label, dur, idx, anomaly, channel):
         tmp = tmp + 3 * test.iloc[:, channel].max()
         test.iloc[idx : idx + 3, channel] = tmp
         test_label.iloc[idx : idx + 3] = 1
-    elif anomaly == "timeshift":
+    elif anomaly == "timeshift_part":
         tmp = test.iloc[idx : idx + dur, channel]
         tmp = tmp.shift(int(dur / 2), fill_value=np.mean(tmp))
         test.iloc[idx : idx + dur, channel] = tmp
         test_label.iloc[idx : idx + dur] = 1
+    elif anomaly == "timeshift":
+        tmp = test.iloc[:, channel]
+        tmp = tmp.shift(dur, fill_value=0)
+        local_vars = calc_var_values(tmp)
+        test.iloc[:, channel] = tmp
+        test_label[local_vars > local_vars.quantile(0.80)] = 1
     elif anomaly == "trend":
         tmp = test.iloc[idx : idx + dur, channel]
         goal_value = 2 * test.iloc[:, channel].max()
@@ -204,15 +254,19 @@ def impute_anomaly(test, test_label, dur, idx, anomaly, channel):
         test_label.iloc[idx : idx + dur] = 1
     elif anomaly == "shuffle":
         num_splits = 10
-        split_length = int(test.shape[0]/num_splits)
+        split_length = int(test.shape[0] / num_splits)
         print(split_length)
-        splits = [test.iloc[i*split_length: (i+1)*split_length] for i in
-                range(num_splits)]
+        splits = [
+            test.iloc[i * split_length : (i + 1) * split_length]
+            for i in range(num_splits)
+        ]
         print(splits)
         permutation = np.random.permutation(range(num_splits))
         print(permutation)
         for i in range(10):
-            test.iloc[i*split_length: (i+1)*split_length] = splits[permutation[i]]
+            test.iloc[i * split_length : (i + 1) * split_length] = splits[
+                permutation[i]
+            ]
         print(test)
     else:
         raise Exception("Unknown Anomaly Type")
@@ -237,3 +291,12 @@ def filterSensors(sensorData, regexs):
             pprint(list(tmp.columns))
         sensorDataFiltered.append(filteredDF)
     return sensorDataFiltered[0]
+
+
+def calc_var_values(tmp):
+    var_list = [0 for i in range(50)]
+    for i in range(50, 9950):
+        var_list.append(tmp.iloc[i - 50 : i + 50].var())
+    for i in range(50):
+        var_list.append(0)
+    return pd.Series(var_list)
