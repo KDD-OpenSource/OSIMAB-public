@@ -133,10 +133,13 @@ Team:
 * [Ajay Kesar](https://github.com/weaslbe)
 * [Axel Stebner](https://github.com/xasetl)
 * [Daniel Thevessen](https://github.com/danthe96)
+* [Karl Rieländer](https://github.com/rielaender)
+* [Shahnawaz Alam](https://github.com/shaanrockz)
 
 Supervisors:
 * [Lukas Ruff](https://github.com/lukasruff)
 * [Fabian Geier](https://github.com/fabiangei)
+* [Benedikt Böing](https://github.com/bboeing)
 * [Emmanuel Müller](https://github.com/emmanuel-mueller)
 
 
